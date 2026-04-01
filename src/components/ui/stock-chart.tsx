@@ -59,6 +59,7 @@ export function StockChart({
         textColor: "#999",
         fontSize: 11,
         fontFamily: "var(--font-geist-mono), monospace",
+        attributionLogo: false,
       },
       grid: {
         vertLines: {
