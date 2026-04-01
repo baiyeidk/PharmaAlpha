@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -42,21 +42,33 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">PharmaAlpha</CardTitle>
-          <p className="text-sm text-muted-foreground">Sign in to your account</p>
-        </CardHeader>
-        <CardContent>
+    <div className="relative flex min-h-screen items-center justify-center bg-background">
+      <div className="absolute inset-0 bg-dot-grid opacity-30" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,oklch(0.95_0.01_195)_0%,transparent_70%)]" />
+
+      <div className="relative w-full max-w-sm px-6">
+        <div className="absolute -inset-px rounded-xl bg-gradient-to-b from-pa-cyan/10 to-transparent blur-sm" />
+        <div className="relative rounded-xl border border-border bg-white shadow-sm p-8">
+          <div className="mb-8 flex flex-col items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-pa-cyan/20 bg-pa-cyan/5">
+              <Activity className="h-6 w-6 text-pa-cyan" />
+            </div>
+            <div className="text-center">
+              <h1 className="text-lg font-semibold tracking-tight">PharmaAlpha</h1>
+              <p className="mt-1 text-xs text-muted-foreground">Sign in to your account</p>
+            </div>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+              <div className="rounded-md border border-pa-red/20 bg-pa-red/5 px-3 py-2 text-xs text-pa-red">
                 {error}
               </div>
             )}
-            <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium">Email</label>
+            <div className="space-y-1.5">
+              <label htmlFor="email" className="text-xs font-medium text-muted-foreground">
+                Email
+              </label>
               <Input
                 id="email"
                 type="email"
@@ -64,30 +76,39 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                className="border-border focus:border-pa-cyan/50"
               />
             </div>
-            <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium">Password</label>
+            <div className="space-y-1.5">
+              <label htmlFor="password" className="text-xs font-medium text-muted-foreground">
+                Password
+              </label>
               <Input
                 id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                className="border-border focus:border-pa-cyan/50"
               />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button
+              type="submit"
+              className="w-full bg-pa-cyan text-white hover:bg-pa-cyan/90 font-medium"
+              disabled={loading}
+            >
               {loading ? "Signing in..." : "Sign in"}
             </Button>
           </form>
-          <p className="mt-4 text-center text-sm text-muted-foreground">
+
+          <p className="mt-6 text-center text-xs text-muted-foreground">
             Don&apos;t have an account?{" "}
-            <Link href="/register" className="text-primary hover:underline">
+            <Link href="/register" className="text-pa-cyan hover:text-pa-cyan/80 transition-colors">
               Sign up
             </Link>
           </p>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

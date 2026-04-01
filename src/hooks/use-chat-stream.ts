@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 
 export interface ChatMessage {
   id: string;
@@ -23,6 +23,28 @@ export function useChatStream({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const loadedConvRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!conversationId || conversationId === loadedConvRef.current) return;
+    loadedConvRef.current = conversationId;
+
+    fetch(`/api/chat/history?conversationId=${conversationId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.messages && Array.isArray(data.messages)) {
+          setMessages(
+            data.messages.map((m: { id: string; role: string; content: string }) => ({
+              id: m.id,
+              role: m.role as ChatMessage["role"],
+              content: m.content,
+              isStreaming: false,
+            }))
+          );
+        }
+      })
+      .catch(() => {});
+  }, [conversationId]);
 
   const sendMessage = useCallback(
     async (content: string) => {
@@ -68,6 +90,7 @@ export function useChatStream({
 
         const decoder = new TextDecoder();
         let buffer = "";
+        let convIdNotified = false;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -88,8 +111,10 @@ export function useChatStream({
               if (
                 chunk.metadata?.conversationId &&
                 !conversationId &&
+                !convIdNotified &&
                 onConversationCreated
               ) {
+                convIdNotified = true;
                 onConversationCreated(chunk.metadata.conversationId);
               }
 
