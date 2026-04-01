@@ -8,7 +8,7 @@ import {
   Settings,
   LogOut,
   Plus,
-  Activity,
+  Crosshair,
   Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,9 +17,9 @@ import { cn } from "@/lib/utils";
 import { useConversations } from "@/hooks/use-conversations";
 
 const navItems = [
-  { href: "/chat", label: "Chat", icon: MessageSquare },
-  { href: "/agents", label: "Agents", icon: Bot },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/chat", label: "OPERATIONS", icon: MessageSquare },
+  { href: "/agents", label: "AGENTS", icon: Bot },
+  { href: "/settings", label: "CONFIG", icon: Settings },
 ];
 
 function timeAgo(dateStr: string): string {
@@ -39,33 +39,36 @@ export function Sidebar() {
   const { conversations, loading: convsLoading } = useConversations();
 
   return (
-    <div className="flex h-full w-[260px] flex-col border-r border-sidebar-border bg-sidebar">
-      <div className="flex h-14 items-center gap-3 px-5">
-        <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-pa-cyan/10 border border-pa-cyan/20">
-          <Activity className="h-4 w-4 text-pa-cyan" />
+    <div className="flex h-full w-[240px] flex-col border-r border-border bg-sidebar">
+      {/* Brand */}
+      <div className="flex h-14 items-center gap-3 px-4 border-b border-border">
+        <div className="flex h-8 w-8 items-center justify-center rounded-sm border border-scrub/30 bg-scrub/10">
+          <Crosshair className="h-4 w-4 text-scrub" />
         </div>
         <div className="min-w-0">
-          <span className="block text-base font-semibold tracking-tight text-sidebar-foreground truncate">
+          <span className="block font-mono text-sm font-bold uppercase tracking-wider text-foreground">
             PharmaAlpha
           </span>
-          <span className="block text-xs font-mono text-pa-cyan uppercase tracking-[0.15em]">
-            Terminal v0.1
+          <span className="block font-mono text-[10px] uppercase tracking-[0.2em] text-scrub">
+            O.R. Console
           </span>
         </div>
       </div>
 
-      <div className="px-3 py-2">
+      {/* New operation */}
+      <div className="px-3 py-3">
         <Link
           href="/chat"
-          className="flex w-full items-center gap-2 rounded-md border border-pa-cyan/15 bg-pa-cyan/5 px-3 py-2 text-sm font-medium text-pa-cyan transition-colors hover:bg-pa-cyan/10 hover:border-pa-cyan/25"
+          className="flex w-full items-center gap-2 rounded-sm border border-scrub/30 bg-scrub/5 px-3 py-2 font-mono text-xs font-semibold uppercase tracking-wider text-scrub transition-colors hover:bg-scrub/15 hover:border-scrub/50"
         >
           <Plus className="h-3.5 w-3.5" />
-          New Session
+          New Operation
         </Link>
       </div>
 
-      <div className="mx-3 h-px bg-sidebar-border" />
+      <div className="mx-3 h-px bg-border" />
 
+      {/* Navigation */}
       <nav className="flex flex-col gap-0.5 px-3 py-2">
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -78,28 +81,29 @@ export function Sidebar() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all",
+                "flex items-center gap-3 rounded-sm px-3 py-2 font-mono text-xs font-medium uppercase tracking-wider transition-all",
                 isActive
-                  ? "bg-sidebar-accent text-pa-cyan"
-                  : "text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                  ? "bg-scrub/10 text-scrub border border-scrub/20"
+                  : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-foreground border border-transparent"
               )}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-3.5 w-3.5" />
               {item.label}
               {isActive && (
-                <div className="ml-auto h-1.5 w-1.5 rounded-full bg-pa-cyan animate-pulse-glow" />
+                <div className="ml-auto h-1.5 w-1.5 rounded-full bg-scrub animate-pulse-glow" />
               )}
             </Link>
           );
         })}
       </nav>
 
-      <div className="mx-3 h-px bg-sidebar-border" />
+      <div className="mx-3 h-px bg-border" />
 
-      <div className="flex items-center gap-2 px-5 pt-3 pb-1">
+      {/* Case history */}
+      <div className="flex items-center gap-2 px-4 pt-3 pb-1">
         <Clock className="h-3 w-3 text-muted-foreground" />
-        <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-          Recent Sessions
+        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          Case History
         </span>
       </div>
 
@@ -107,12 +111,12 @@ export function Sidebar() {
         {convsLoading ? (
           <div className="space-y-2 py-2">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-10 rounded-md bg-sidebar-accent/30 animate-pulse" />
+              <div key={i} className="h-9 rounded-sm bg-sidebar-accent/30 animate-pulse" />
             ))}
           </div>
         ) : conversations.length === 0 ? (
-          <p className="px-3 py-4 text-center text-xs text-muted-foreground">
-            No sessions yet
+          <p className="px-3 py-4 text-center font-mono text-xs text-muted-foreground">
+            No cases on record
           </p>
         ) : (
           <div className="flex flex-col gap-0.5 py-1">
@@ -123,17 +127,17 @@ export function Sidebar() {
                   key={conv.id}
                   href={`/chat/${conv.id}`}
                   className={cn(
-                    "group flex items-center gap-2 rounded-md px-3 py-2 transition-all",
+                    "group flex items-center gap-2 rounded-sm px-3 py-2 transition-all",
                     isActive
-                      ? "bg-sidebar-accent text-sidebar-foreground"
-                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground"
+                      ? "bg-scrub/10 text-foreground border border-scrub/20"
+                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-foreground border border-transparent"
                   )}
                 >
-                  <MessageSquare className="h-3 w-3 shrink-0 opacity-50" />
-                  <span className="min-w-0 flex-1 truncate text-sm">
+                  <MessageSquare className="h-3 w-3 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 flex-1 truncate font-mono text-xs">
                     {conv.title}
                   </span>
-                  <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                  <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
                     {timeAgo(conv.updatedAt)}
                   </span>
                 </Link>
@@ -143,20 +147,20 @@ export function Sidebar() {
         )}
       </ScrollArea>
 
-      <div className="mx-3 h-px bg-sidebar-border" />
+      <div className="mx-3 h-px bg-border" />
 
       <div className="p-3">
         <Button
           variant="ghost"
           size="sm"
-          className="w-full justify-start gap-3 text-sm text-sidebar-foreground/80 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+          className="w-full justify-start gap-3 font-mono text-xs uppercase tracking-wider text-sidebar-foreground/80 hover:text-vitals-red hover:bg-vitals-red/5 rounded-sm"
           onClick={async () => {
             await fetch("/api/auth/logout", { method: "POST" });
             window.location.href = "/login";
           }}
         >
           <LogOut className="h-3.5 w-3.5" />
-          Sign out
+          Scrub Out
         </Button>
       </div>
     </div>

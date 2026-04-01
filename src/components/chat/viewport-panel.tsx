@@ -3,181 +3,95 @@
 import {
   X,
   Monitor,
-  TrendingUp,
-  TrendingDown,
+  HeartPulse,
+  HeartCrack,
   FileText,
   ImageIcon,
+  Scan,
+  Stethoscope,
+  Pill,
+  Thermometer,
+  Activity,
+  Wind,
+  Droplets,
 } from "lucide-react";
 import { useViewportStore, type ViewportItem } from "@/stores/viewport-store";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ECGCanvas } from "@/components/ui/ecg-canvas";
+import { StockChart } from "@/components/ui/stock-chart";
+import { useStockKline } from "@/hooks/use-stock-data";
+import { CompanyVitalsCard, type CompanyVitals } from "@/components/ui/company-vitals-card";
 import { cn } from "@/lib/utils";
 
 const typeIcons: Record<string, typeof Monitor> = {
   image: ImageIcon,
-  chart: TrendingUp,
+  chart: HeartPulse,
   pdf: FileText,
   text: Monitor,
 };
 
-/* ── Mock market data for the default overview ───────────── */
-
-const miniIndices = [
-  { name: "S&P Pharma", ticker: "XPH", value: "2,847", change: "+1.24%", up: true },
-  { name: "NBI Biotech", ticker: "NBI", value: "4,128", change: "-0.38%", up: false },
-  { name: "XLV Health", ticker: "XLV", value: "89.42", change: "+0.82%", up: true },
+const wardPatients: CompanyVitals[] = [
+  {
+    ticker: "600276", name: "恒瑞医药", price: "¥48.32", priceChange: "+3.2%", priceUp: true,
+    revenue: "+18%", revenueStatus: "growing", pe: "42.5x", peStatus: "elevated",
+    pipeline: "12 期III", pipelineStatus: "strong", cashflow: "+¥28亿", cashflowStatus: "positive",
+    sentiment: "99.1°", sentimentStatus: "fever", overallCondition: "healthy", stockCode: "sh600276",
+  },
+  {
+    ticker: "603259", name: "药明康德", price: "¥62.15", priceChange: "-1.8%", priceUp: false,
+    revenue: "-8%", revenueStatus: "declining", pe: "25.3x", peStatus: "healthy",
+    pipeline: "CRO龙头", pipelineStatus: "strong", cashflow: "+¥15亿", cashflowStatus: "positive",
+    sentiment: "96.4°", sentimentStatus: "cold", overallCondition: "irregular", stockCode: "sh603259",
+  },
+  {
+    ticker: "688235", name: "百济神州", price: "¥142.30", priceChange: "-4.1%", priceUp: false,
+    revenue: "-15%", revenueStatus: "declining", pe: "亏损", peStatus: "critical",
+    pipeline: "6 期III", pipelineStatus: "moderate", cashflow: "-¥8亿", cashflowStatus: "negative",
+    sentiment: "102.8°", sentimentStatus: "fever", overallCondition: "critical", stockCode: "sh688235",
+  },
 ];
 
-const topMovers = [
-  { ticker: "LLY", price: "$792.10", change: "+3.2%", up: true },
-  { ticker: "BMY", price: "$51.83", change: "+2.8%", up: true },
-  { ticker: "MRNA", price: "$142.30", change: "+2.1%", up: true },
-  { ticker: "GILD", price: "$84.26", change: "-1.4%", up: false },
-  { ticker: "BIIB", price: "$198.50", change: "-1.8%", up: false },
-];
-
-const miniNews = [
-  { title: "Lilly GLP-1 agonist revenue +23% vs est.", time: "2h", up: true },
-  { title: "FDA fast-tracks Pfizer mRNA oncology", time: "5h", up: true },
-  { title: "Keytruda biosimilar competition nears", time: "8h", up: false },
-];
-
-function MarketOverview() {
+function DiagnosticsOverview() {
   return (
     <ScrollArea className="h-full">
-      <div className="p-3 space-y-4">
+      <div className="p-4 space-y-5">
+        {/* 板块心电 */}
         <div>
-          <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-            Indices
-          </span>
-          <div className="mt-1.5 space-y-1">
-            {miniIndices.map((idx) => (
-              <div
-                key={idx.ticker}
-                className="flex items-center justify-between rounded-md border border-border/20 bg-card/30 px-2.5 py-2"
-              >
-                <div>
-                  <span className="block text-xs font-mono text-muted-foreground">
-                    {idx.name}
-                  </span>
-                  <span className="block font-mono text-sm font-medium tabular-nums text-foreground">
-                    {idx.value}
-                  </span>
-                </div>
-                <span
-                  className={cn(
-                    "font-mono text-sm tabular-nums",
-                    idx.up ? "text-pa-green" : "text-pa-red"
-                  )}
-                >
-                  {idx.up ? "▲" : "▽"} {idx.change}
-                </span>
-              </div>
+          <div className="flex items-center gap-3 mb-3">
+            <Stethoscope className="h-5 w-5 text-scrub" />
+            <span className="font-mono text-sm tracking-widest text-scrub">板块心跳</span>
+          </div>
+          <div className="border border-border bg-card">
+            <ECGCanvas condition="healthy" color="oklch(0.42 0.14 160)" height={64} speed={2} />
+          </div>
+        </div>
+
+        {/* 跟踪企业 */}
+        <div>
+          <div className="flex items-center gap-3 mb-3">
+            <Activity className="h-5 w-5 text-vitals-amber" />
+            <span className="font-mono text-sm tracking-widest text-vitals-amber">重点跟踪</span>
+          </div>
+          <div className="space-y-2">
+            {wardPatients.map((p) => (
+              <CompanyVitalsCard key={p.ticker} data={p} compact />
             ))}
           </div>
         </div>
 
+        {/* 指标说明 */}
         <div>
-          <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-            Sector Performance
-          </span>
-          <div className="mt-1.5 rounded-md border border-border/20 bg-card/30 p-3">
-            <svg viewBox="0 0 400 150" className="w-full" fill="none">
-              <defs>
-                <linearGradient id="vpGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="oklch(0.47 0.14 195)" stopOpacity="0.12" />
-                  <stop offset="100%" stopColor="oklch(0.47 0.14 195)" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              {[0, 37.5, 75, 112.5, 150].map((y) => (
-                <line
-                  key={`h-${y}`}
-                  x1="0" y1={y} x2="400" y2={y}
-                  stroke="oklch(0.90 0.005 250)" strokeWidth="0.5" strokeDasharray="3 3"
-                />
-              ))}
-              {[0, 80, 160, 240, 320, 400].map((x) => (
-                <line
-                  key={`v-${x}`}
-                  x1={x} y1="0" x2={x} y2="150"
-                  stroke="oklch(0.90 0.005 250)" strokeWidth="0.5" strokeDasharray="3 3"
-                />
-              ))}
-              <path
-                d="M0,150 L0,105 L40,100 L80,110 L120,85 L160,75 L200,65 L240,60 L280,55 L320,45 L360,40 L400,35 L400,150 Z"
-                fill="url(#vpGrad)"
-              />
-              <polyline
-                points="0,105 40,100 80,110 120,85 160,75 200,65 240,60 280,55 320,45 360,40 400,35"
-                stroke="oklch(0.47 0.14 195)"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <circle cx="400" cy="35" r="3" fill="oklch(0.47 0.14 195)" />
-            </svg>
-            <div className="mt-2 flex items-center justify-between font-mono text-xs text-muted-foreground">
-              <span>6 months</span>
-              <span className="text-pa-green">+12.4% YTD</span>
-            </div>
+          <div className="flex items-center gap-3 mb-3">
+            <Pill className="h-5 w-5 text-muted-foreground" />
+            <span className="font-mono text-sm tracking-widest text-muted-foreground">指标说明</span>
           </div>
-        </div>
-
-        <div>
-          <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-            Top Movers
-          </span>
-          <div className="mt-1.5 rounded-md border border-border/20 bg-card/30 divide-y divide-border/15">
-            {topMovers.map((m) => (
-              <div key={m.ticker} className="flex items-center justify-between px-2.5 py-1.5">
-                <div className="flex items-center gap-2">
-                  {m.up ? (
-                    <TrendingUp className="h-3 w-3 text-pa-green" />
-                  ) : (
-                    <TrendingDown className="h-3 w-3 text-pa-red" />
-                  )}
-                  <span className="font-mono text-sm font-medium text-foreground">
-                    {m.ticker}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                    {m.price}
-                  </span>
-                  <span
-                    className={cn(
-                      "font-mono text-xs tabular-nums w-14 text-right",
-                      m.up ? "text-pa-green" : "text-pa-red"
-                    )}
-                  >
-                    {m.change}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-            Headlines
-          </span>
-          <div className="mt-1.5 space-y-0">
-            {miniNews.map((n, i) => (
-              <div key={i} className="flex items-start gap-2 py-1.5">
-                <div
-                  className={cn(
-                    "mt-1 h-1 w-1 shrink-0 rounded-full",
-                    n.up ? "bg-pa-green/40" : "bg-pa-red/40"
-                  )}
-                />
-                <p className="min-w-0 flex-1 text-xs leading-snug text-foreground/80">
-                  {n.title}
-                </p>
-                <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                  {n.time}
-                </span>
-              </div>
-            ))}
+          <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2"><Activity className="h-4 w-4 text-vitals-green" /> 营收 = 收入增长趋势</div>
+            <div className="flex items-center gap-2"><Droplets className="h-4 w-4 text-vitals-green" /> 市盈率 = 估值水平</div>
+            <div className="flex items-center gap-2"><HeartPulse className="h-4 w-4 text-vitals-green" /> 管线 = 研发管线强度</div>
+            <div className="flex items-center gap-2"><Wind className="h-4 w-4 text-vitals-green" /> 现金流 = 资金充裕度</div>
+            <div className="flex items-center gap-2"><Thermometer className="h-4 w-4 text-vitals-green" /> 情绪 = 市场热度</div>
+            <div className="flex items-center gap-2"><HeartCrack className="h-4 w-4 text-vitals-red" /> = 健康恶化信号</div>
           </div>
         </div>
       </div>
@@ -185,79 +99,72 @@ function MarketOverview() {
   );
 }
 
-/* ── Viewport item content renderers ─────────────────────── */
+function tickerToCode(ticker: string): string {
+  if (ticker.startsWith("sh") || ticker.startsWith("sz")) return ticker;
+  const code = ticker.replace(/\D/g, "");
+  if (!code) return "";
+  if (code.startsWith("6")) return `sh${code}`;
+  return `sz${code}`;
+}
+
+function ChartContent({ item }: { item: ViewportItem }) {
+  const tickers = (item.metadata?.tickers as string[]) || [];
+  const firstTicker = tickers[0] || "";
+  const code = tickerToCode(firstTicker);
+  const { kline, loading } = useStockKline(code, "daily", 90);
+
+  return (
+    <div className="flex h-full flex-col p-6 gap-4">
+      <div className="text-center">
+        <p className="font-mono text-lg font-bold text-scrub">{item.title}</p>
+        {item.metadata?.description != null && (
+          <p className="mt-1 text-base text-muted-foreground">{String(item.metadata.description)}</p>
+        )}
+      </div>
+      <div className="flex-1 min-h-0 border border-border bg-card relative">
+        {loading || kline.length === 0 ? (
+          <div className="h-full flex items-center justify-center">
+            <ECGCanvas condition="healthy" color="oklch(0.42 0.14 160)" height={200} speed={2} lineWidth={2} />
+          </div>
+        ) : (
+          <StockChart
+            data={kline}
+            height={300}
+            showGrid={true}
+            showTime={true}
+            showPrice={true}
+            showCrosshair={true}
+          />
+        )}
+        <div className="absolute inset-0 pointer-events-none bg-surgical-grid-fine opacity-20" />
+      </div>
+    </div>
+  );
+}
 
 function ViewportContent({ item }: { item: ViewportItem }) {
   switch (item.type) {
     case "image":
       return (
-        <div className="flex h-full items-center justify-center p-4">
+        <div className="flex h-full items-center justify-center p-5 bg-surgical-grid-fine">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={item.url}
-            alt={item.title}
-            className="max-h-full max-w-full rounded border border-border/30 object-contain"
-          />
+          <img src={item.url} alt={item.title} className="max-h-full max-w-full rounded-sm border border-border object-contain" />
         </div>
       );
     case "pdf":
-      return (
-        <iframe src={item.url} className="h-full w-full" title={item.title} />
-      );
+      return <iframe src={item.url} className="h-full w-full" title={item.title} />;
     case "chart":
-      return (
-        <div className="flex h-full flex-col items-center justify-center gap-4 p-6">
-          <div className="w-full">
-            <svg viewBox="0 0 400 200" className="w-full" fill="none">
-              <defs>
-                <linearGradient id="chartGradItem" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="oklch(0.47 0.14 195)" stopOpacity="0.15" />
-                  <stop offset="100%" stopColor="oklch(0.47 0.14 195)" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              {[0, 50, 100, 150, 200].map((y) => (
-                <line key={y} x1="0" y1={y} x2="400" y2={y}
-                  stroke="oklch(0.90 0.005 250)" strokeWidth="0.5" strokeDasharray="3 3"
-                />
-              ))}
-              <path
-                d="M0,200 L0,140 L50,130 L100,145 L150,110 L200,100 L250,80 L300,85 L350,60 L400,55 L400,200 Z"
-                fill="url(#chartGradItem)"
-              />
-              <polyline
-                points="0,140 50,130 100,145 150,110 200,100 250,80 300,85 350,60 400,55"
-                stroke="oklch(0.47 0.14 195)"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <circle cx="400" cy="55" r="4" fill="oklch(0.47 0.14 195)" />
-            </svg>
-          </div>
-          <div className="text-center">
-            <p className="font-mono text-sm text-pa-cyan">{item.title}</p>
-            {item.metadata?.description != null && (
-              <p className="mt-1 text-xs text-muted-foreground">
-                {String(item.metadata.description)}
-              </p>
-            )}
-          </div>
-        </div>
-      );
+      return <ChartContent item={item} />;
     case "text":
       return (
         <ScrollArea className="h-full">
-          <div className="p-4 text-sm font-mono leading-relaxed text-foreground/80 whitespace-pre-wrap">
-            {item.content}
-          </div>
+          <div className="p-5 text-base font-mono leading-relaxed text-foreground whitespace-pre-wrap">{item.content}</div>
         </ScrollArea>
       );
     default:
-      return <MarketOverview />;
+      return <DiagnosticsOverview />;
   }
 }
-
-/* ── Main viewport panel ─────────────────────────────────── */
 
 export function ViewportPanel() {
   const { items, activeItemId, setActiveItem, removeItem } = useViewportStore();
@@ -266,32 +173,8 @@ export function ViewportPanel() {
 
   return (
     <div className="flex h-full flex-col bg-card/20">
-      <div className="flex h-10 items-center justify-between border-b border-border/40 px-3">
-        <div className="flex items-center gap-2">
-          <Monitor className="h-3.5 w-3.5 text-pa-amber" />
-          <span className="font-mono text-xs font-medium uppercase tracking-wider text-pa-amber">
-            Viewport
-          </span>
-        </div>
-        <div className="flex items-center gap-1">
-          {hasItems && (
-            <button
-              onClick={() => {
-                items.forEach((i) => removeItem(i.id));
-              }}
-              className="font-mono text-xs text-muted-foreground hover:text-muted-foreground px-1.5 py-0.5 rounded transition-colors"
-            >
-              Clear
-            </button>
-          )}
-          <span className="font-mono text-xs text-muted-foreground">
-            {hasItems ? `${items.length} item${items.length !== 1 ? "s" : ""}` : "Market"}
-          </span>
-        </div>
-      </div>
-
       {hasItems && items.length > 1 && (
-        <div className="flex items-center gap-1 overflow-x-auto border-b border-border/30 px-2 py-1.5">
+        <div className="flex items-center gap-px overflow-x-auto border-b border-border bg-background px-2 py-1.5">
           {items.map((item) => {
             const Icon = typeIcons[item.type] || Monitor;
             return (
@@ -299,42 +182,41 @@ export function ViewportPanel() {
                 key={item.id}
                 onClick={() => setActiveItem(item.id)}
                 className={cn(
-                  "flex shrink-0 items-center gap-1.5 rounded px-2 py-1 font-mono text-xs transition-colors",
+                  "flex shrink-0 items-center gap-2 rounded-sm px-3 py-1.5 font-mono text-sm tracking-wider transition-colors",
                   activeItemId === item.id
-                    ? "bg-pa-cyan/10 text-pa-cyan"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-scrub/10 text-scrub border border-scrub/20"
+                    : "text-muted-foreground hover:text-foreground border border-transparent"
                 )}
               >
-                <Icon className="h-3 w-3" />
+                <Icon className="h-5 w-5" />
                 {item.title}
                 <span
                   role="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeItem(item.id);
-                  }}
-                  className="ml-1 rounded-sm p-0.5 hover:bg-pa-red/10 hover:text-pa-red"
+                  onClick={(e) => { e.stopPropagation(); removeItem(item.id); }}
+                  className="ml-1 p-1 hover:bg-vitals-red/10 hover:text-vitals-red rounded-sm"
                 >
-                  <X className="h-2.5 w-2.5" />
+                  <X className="h-4 w-4" />
                 </span>
               </button>
             );
           })}
+          <button
+            onClick={() => items.forEach((i) => removeItem(i.id))}
+            className="ml-auto shrink-0 font-mono text-sm tracking-wider text-muted-foreground hover:text-vitals-red px-2 transition-colors"
+          >
+            清空
+          </button>
         </div>
       )}
 
       <div className="flex-1 overflow-hidden">
-        {activeItem ? <ViewportContent item={activeItem} /> : <MarketOverview />}
+        {activeItem ? <ViewportContent item={activeItem} /> : <DiagnosticsOverview />}
       </div>
 
       {activeItem && (
-        <div className="flex items-center justify-between border-t border-border/30 px-3 py-1.5">
-          <span className="font-mono text-xs text-muted-foreground uppercase">
-            {activeItem.type}
-          </span>
-          <span className="font-mono text-xs text-muted-foreground">
-            {new Date(activeItem.createdAt).toLocaleTimeString()}
-          </span>
+        <div className="flex items-center justify-between border-t border-border px-4 py-2 font-mono text-sm text-muted-foreground">
+          <span className="tracking-widest">{activeItem.type}</span>
+          <span>{new Date(activeItem.createdAt).toLocaleTimeString("zh-CN")}</span>
         </div>
       )}
     </div>

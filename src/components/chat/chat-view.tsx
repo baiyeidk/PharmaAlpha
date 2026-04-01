@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bot, PanelRightOpen, PanelRightClose } from "lucide-react";
+import { Bot, Activity, Scan, Clock } from "lucide-react";
 import { ChatMessage } from "./chat-message";
 import { ChatInput } from "./chat-input";
 import { ViewportPanel } from "./viewport-panel";
@@ -17,46 +17,34 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useConversations } from "@/hooks/use-conversations";
 
 const PHARMA_TICKERS = new Set([
-  "PFE","JNJ","MRK","ABBV","LLY","BMY","AMGN","GILD","AZN","NVO",
-  "SNY","GSK","REGN","VRTX","BIIB","MRNA","BNTX","ZTS","BAX","BDX",
-  "MDT","ABT","TMO","DHR","SYK","ISRG","BSX","EW","HCA","UNH",
+  "600276","603259","300760","600436","600196","688235",
+  "002007","300122","300347","000661","300015","002422",
+  "300529","603392","688180","300558","002252","600216",
+  "688658","300595","恒瑞医药","药明康德","迈瑞医疗","片仔癀",
+  "复星医药","百济神州","华兰生物","智飞生物","泰格医药","长春高新",
 ]);
 
 function extractTickers(text: string): string[] {
-  const words = text.match(/\b[A-Z]{2,5}\b/g) || [];
-  return [...new Set(words.filter((w) => PHARMA_TICKERS.has(w)))];
+  const codePattern = /\b\d{6}\b/g;
+  const namePattern = /(?:恒瑞医药|药明康德|迈瑞医疗|片仔癀|复星医药|百济神州|华兰生物|智飞生物|泰格医药|长春高新)/g;
+  const codes = text.match(codePattern) || [];
+  const names = text.match(namePattern) || [];
+  return [...new Set([...codes, ...names].filter((w) => PHARMA_TICKERS.has(w)))];
 }
 
-function AgentSelect({
-  agents,
-  value,
-  onChange,
-}: {
-  agents: { id: string; name: string; displayName: string | null }[];
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <Select value={value} onValueChange={(v) => { if (v) onChange(v); }}>
-      <SelectTrigger className="w-[200px] h-9 bg-card/50 border-border/40 text-sm font-mono">
-        <SelectValue placeholder="Select agent" />
-      </SelectTrigger>
-      <SelectContent>
-        {agents.map((agent) => (
-          <SelectItem key={agent.id} value={agent.id} className="text-sm font-mono">
-            <div className="flex items-center gap-2">
-              <Bot className="h-3 w-3 text-pa-cyan" />
-              {agent.displayName || agent.name}
-            </div>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "刚刚";
+  if (mins < 60) return `${mins}分钟前`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}小时前`;
+  const days = Math.floor(hours / 24);
+  return `${days}天前`;
 }
 
 interface ChatViewProps {
@@ -66,9 +54,11 @@ interface ChatViewProps {
 export function ChatView({ conversationId }: ChatViewProps) {
   const { agents, loading: agentsLoading } = useAgents();
   const [selectedAgentId, setSelectedAgentId] = useState<string>("");
-  const { isOpen: viewportOpen, togglePanel, pushItem } = useViewportStore();
+  const { pushItem } = useViewportStore();
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastCheckedRef = useRef<string>("");
+  const { conversations } = useConversations();
+  const [showCases, setShowCases] = useState(false);
 
   useEffect(() => {
     if (agents.length > 0 && !selectedAgentId) {
@@ -102,11 +92,8 @@ export function ChatView({ conversationId }: ChatViewProps) {
     if (tickers.length > 0) {
       pushItem({
         type: "chart",
-        title: `${tickers.slice(0, 3).join(", ")} Analysis`,
-        metadata: {
-          description: `Mentioned tickers: ${tickers.join(", ")}`,
-          tickers,
-        },
+        title: `${tickers.slice(0, 3).join("、")} 扫描`,
+        metadata: { description: `检测到: ${tickers.join("、")}`, tickers },
       });
     }
   }, [messages, pushItem]);
@@ -114,95 +101,104 @@ export function ChatView({ conversationId }: ChatViewProps) {
   const noAgent = !agentsLoading && agents.length === 0;
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex h-10 items-center justify-between border-b border-border/40 px-4">
-        <div className="flex items-center gap-3">
-          {agents.length > 0 && (
-            <AgentSelect
-              agents={agents}
-              value={selectedAgentId}
-              onChange={setSelectedAgentId}
-            />
-          )}
-          {selectedAgentId && (
-            <div className="flex items-center gap-1.5 font-mono text-xs text-pa-green">
-              <div className="h-1.5 w-1.5 rounded-full bg-pa-green animate-pulse" />
-              READY
-            </div>
-          )}
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={togglePanel}
-          className={cn(
-            "h-8 gap-1.5 px-2.5 font-mono text-xs uppercase tracking-wider",
-            viewportOpen
-              ? "text-pa-amber"
-              : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          {viewportOpen ? (
-            <PanelRightClose className="h-3.5 w-3.5" />
-          ) : (
-            <PanelRightOpen className="h-3.5 w-3.5" />
-          )}
-          Viewport
-        </Button>
-      </div>
-
+    <div className="flex h-full flex-col bg-white">
       <div className="flex flex-1 overflow-hidden">
-        <div
-          className={cn(
-            "flex min-w-0 flex-col",
-            viewportOpen ? "w-[55%]" : "flex-1"
-          )}
-        >
-          <ScrollArea className="flex-1" ref={scrollRef}>
-            {messages.length === 0 ? (
-              <WelcomeDashboard
-                onSendPrompt={sendMessage}
-                disabled={!selectedAgentId || noAgent}
-              />
-            ) : (
-              <div
+
+        {/* 左侧：分析对话 */}
+        <div className="flex min-w-0 flex-1 flex-col border-r border-neutral-200">
+          {/* 头部 */}
+          <div className="flex h-11 items-center justify-between border-b border-neutral-200 px-3 font-mono text-sm tracking-widest bg-white text-neutral-900">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 text-neutral-900">
+                <Activity className="h-5 w-5" />
+                分析面板
+              </div>
+              {selectedAgentId && (
+                <span className="text-scrub flex items-center gap-1">
+                  <div className="h-1 w-1 rounded-full bg-scrub animate-pulse" />
+                  在线
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {agents.length > 0 && (
+                <Select value={selectedAgentId} onValueChange={(v) => { if (v) setSelectedAgentId(v); }}>
+                  <SelectTrigger className="h-8 w-[200px] border-neutral-200 bg-white text-sm font-mono tracking-wider rounded-sm px-1.5 py-0 text-neutral-900">
+                    <SelectValue placeholder="选择智能体" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-sm bg-white border-neutral-200">
+                    {agents.map((agent) => (
+                      <SelectItem key={agent.id} value={agent.id} className="font-mono text-sm text-neutral-900">
+                        <div className="flex items-center gap-1.5">
+                          <Bot className="h-5 w-5 text-scrub" />
+                          {agent.displayName || agent.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              <button
+                onClick={() => setShowCases(!showCases)}
                 className={cn(
-                  "py-4",
-                  viewportOpen ? "px-2" : "mx-auto max-w-3xl"
+                  "flex items-center gap-1 px-1.5 py-0.5 rounded-sm transition-colors text-sm text-neutral-900",
+                  showCases ? "text-scrub bg-scrub/10" : "text-neutral-600 hover:text-neutral-900"
                 )}
               >
+                <Clock className="h-5 w-5" />
+                历史
+              </button>
+            </div>
+          </div>
+
+          {/* 历史记录抽屉 */}
+          {showCases && conversations.length > 0 && (
+            <div className="border-b border-neutral-200 bg-neutral-50 max-h-32 overflow-y-auto">
+              {conversations.slice(0, 10).map((c) => (
+                <a
+                  key={c.id}
+                  href={`/chat/${c.id}`}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-neutral-600 hover:text-neutral-900 hover:bg-white transition-colors border-b border-neutral-200/80 last:border-0"
+                >
+                  <span className="text-neutral-500">{timeAgo(c.updatedAt)}</span>
+                  <span className="truncate text-neutral-800">{c.title}</span>
+                </a>
+              ))}
+            </div>
+          )}
+
+          {/* 对话内容 */}
+          <ScrollArea className="flex-1" ref={scrollRef}>
+            {messages.length === 0 ? (
+              <WelcomeDashboard onSendPrompt={sendMessage} disabled={!selectedAgentId || noAgent} />
+            ) : (
+              <div>
                 {messages.map((msg) => (
-                  <ChatMessage
-                    key={msg.id}
-                    role={msg.role}
-                    content={msg.content}
-                    isStreaming={msg.isStreaming}
-                  />
+                  <ChatMessage key={msg.id} role={msg.role} content={msg.content} isStreaming={msg.isStreaming} />
                 ))}
               </div>
             )}
           </ScrollArea>
 
-          <div
-            className={cn(
-              "border-t border-border/40 p-4",
-              !viewportOpen && "mx-auto w-full max-w-3xl"
-            )}
-          >
-            <ChatInput
-              onSend={sendMessage}
-              onStop={stopGeneration}
-              isLoading={isLoading}
-              disabled={!selectedAgentId || noAgent}
-            />
-          </div>
+          {/* 输入栏 */}
+          <ChatInput
+            onSend={sendMessage}
+            onStop={stopGeneration}
+            isLoading={isLoading}
+            disabled={!selectedAgentId || noAgent}
+          />
         </div>
 
-        {viewportOpen && (
-          <div className="w-[45%] border-l border-border/40">
+        {/* 右侧：诊断视窗 */}
+        <div className="hidden w-[42%] shrink-0 lg:flex flex-col">
+          <div className="flex h-11 items-center gap-2 border-b border-neutral-200 px-3 font-mono text-sm tracking-widest bg-white text-neutral-900">
+            <Scan className="h-5 w-5 text-plasma" />
+            <span className="text-plasma">诊断视窗</span>
+          </div>
+          <div className="flex-1 overflow-hidden bg-white">
             <ViewportPanel />
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

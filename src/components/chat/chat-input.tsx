@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Square } from "lucide-react";
+import { Send, Square, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -18,14 +17,14 @@ export function ChatInput({
   onStop,
   isLoading = false,
   disabled = false,
-  placeholder = "Type your message...",
+  placeholder = "输入您想分析的公司或问题…",
 }: ChatInputProps) {
   const [input, setInput] = useState("");
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!isLoading) {
-      textareaRef.current?.focus();
+      inputRef.current?.focus();
     }
   }, [isLoading]);
 
@@ -36,40 +35,48 @@ export function ChatInput({
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter") {
       e.preventDefault();
       handleSubmit();
     }
   }
 
   return (
-    <div className="flex items-end gap-2">
-      <Textarea
-        ref={textareaRef}
+    <div className="flex items-center h-14 border-t border-neutral-200 bg-white">
+      <div className="flex items-center gap-1.5 px-3 text-scrub shrink-0">
+        <ChevronRight className="h-5 w-5" />
+        <span className="text-sm tracking-widest text-neutral-900 font-mono">输入</span>
+      </div>
+      <div className="h-full w-px bg-neutral-200" />
+      <input
+        ref={inputRef}
+        type="text"
         value={input}
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         disabled={disabled}
-        rows={1}
-        className="min-h-[48px] max-h-[200px] resize-none bg-card/50 border-border/40 text-base placeholder:text-muted-foreground/70 focus-visible:border-pa-cyan/40 focus-visible:ring-pa-cyan/10"
+        className="flex-1 h-full bg-transparent px-3 text-lg text-neutral-900 placeholder:text-neutral-400 focus:outline-none disabled:opacity-40"
       />
+      <div className="h-full w-px bg-neutral-200" />
       {isLoading ? (
         <Button
           size="icon"
+          variant="ghost"
           onClick={onStop}
-          className="shrink-0 bg-pa-red/80 text-foreground hover:bg-pa-red"
+          className="h-14 w-14 rounded-none text-vitals-red hover:bg-vitals-red/10 hover:text-vitals-red"
         >
-          <Square className="h-4 w-4" />
+          <Square className="h-6 w-6" />
         </Button>
       ) : (
         <Button
           size="icon"
+          variant="ghost"
           onClick={handleSubmit}
           disabled={!input.trim() || disabled}
-          className="shrink-0 bg-pa-cyan text-background hover:bg-pa-cyan/90 disabled:opacity-20"
+          className="h-14 w-14 rounded-none text-scrub hover:bg-scrub/10 hover:text-scrub disabled:opacity-20"
         >
-          <Send className="h-4 w-4" />
+          <Send className="h-6 w-6" />
         </Button>
       )}
     </div>

@@ -10,16 +10,18 @@ export async function Header() {
       .toUpperCase() || "U";
 
   return (
-    <header className="flex h-10 items-center justify-between border-b border-border/40 bg-background/60 backdrop-blur-sm px-4">
-      <div className="flex items-center gap-2 font-mono text-xs text-muted-foreground uppercase tracking-wider">
-        <div className="h-1.5 w-1.5 rounded-full bg-pa-green animate-pulse" />
-        System Online
+    <header className="flex h-9 items-center justify-between border-b border-border bg-marrow/50 backdrop-blur-sm px-4 font-mono text-xs">
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 text-vitals-green">
+          <div className="h-1.5 w-1.5 rounded-full bg-vitals-green animate-pulse-glow" />
+          <span className="uppercase tracking-widest">Vitals OK</span>
+        </div>
+        <div className="h-3 w-px bg-border" />
+        <span className="uppercase tracking-wider text-muted-foreground">O.R. Active</span>
       </div>
-      <div className="flex items-center gap-2.5">
-        <span className="font-mono text-xs text-muted-foreground">
-          {session?.email}
-        </span>
-        <div className="flex h-7 w-7 items-center justify-center rounded-md border border-border/60 bg-card text-xs font-mono font-medium text-pa-cyan">
+      <div className="flex items-center gap-3">
+        <span className="text-muted-foreground">{session?.email}</span>
+        <div className="flex h-6 w-6 items-center justify-center rounded-sm border border-scrub/30 bg-scrub/10 text-[10px] font-bold text-scrub">
           {initials}
         </div>
       </div>
