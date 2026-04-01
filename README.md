@@ -1,36 +1,118 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PharmaAlpha
+
+AI-powered Agent platform for pharmaceutical intelligence, built with Next.js 16 full-stack architecture.
+
+## Tech Stack
+
+- **Framework**: Next.js 16 (App Router, Server Components, Turbopack)
+- **UI**: Tailwind CSS v4 + shadcn/ui
+- **Auth**: NextAuth.js v5 (Auth.js)
+- **Database**: PostgreSQL + Prisma v7 (Driver Adapter)
+- **State**: Zustand
+- **Agent Runtime**: Python 3.11+, CLI JSON Lines protocol
+- **Streaming**: Server-Sent Events (SSE)
+
+## Project Structure
+
+```
+src/
+├── app/              # Next.js App Router (pages + API routes)
+│   ├── (auth)/       # Login / Register pages
+│   ├── (dashboard)/  # Main app (Chat, Agents, Settings)
+│   └── api/          # REST + SSE endpoints
+├── components/       # React components (ui, chat, layout)
+├── hooks/            # Custom React hooks
+├── lib/              # Core libraries
+│   ├── agents/       # Agent executor, registry, stream utils
+│   ├── auth.ts       # NextAuth config
+│   └── db.ts         # Prisma client singleton
+└── types/            # TypeScript types
+
+agents/               # Python Agent implementations
+├── base/             # Base agent class + protocol
+└── pharma_agent/     # Demo agent
+```
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 18+
+- pnpm
+- Python 3.11+
+- PostgreSQL
+
+### Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+# Install Node dependencies
+pnpm install
+
+# Set up environment
+cp .env.example .env
+# Edit .env with your PostgreSQL connection string
+
+# Generate Prisma client
+pnpm exec prisma generate
+
+# Run database migrations
+pnpm exec prisma migrate dev --name init
+
+# Install Python agent dependencies
+pip install -r agents/requirements.txt
+
+# Start dev server
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Adding a New Agent
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Create a directory under `agents/`:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+agents/my_agent/
+├── __init__.py
+├── agent.py       # Entry point
+└── config.yaml    # Agent metadata
+```
 
-## Learn More
+2. Implement `BaseAgent`:
 
-To learn more about Next.js, take a look at the following resources:
+```python
+from base import BaseAgent
+from base.protocol import AgentRequest, AgentChunk, AgentResult
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+class MyAgent(BaseAgent):
+    def execute(self, request):
+        yield AgentChunk(content="Processing...")
+        yield AgentResult(content="Done!")
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+if __name__ == "__main__":
+    MyAgent().run()
+```
 
-## Deploy on Vercel
+3. Add `config.yaml`:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```yaml
+name: my_agent
+display_name: My Agent
+description: Description of what this agent does
+entry_point: my_agent/agent.py
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+4. The agent will be auto-discovered by the Registry.
+
+## CLI Protocol
+
+Agents communicate via stdin/stdout JSON Lines:
+
+**Input** (stdin):
+```json
+{"action": "chat", "messages": [{"role": "user", "content": "..."}], "params": {}}
+```
+
+**Output** (stdout, one JSON per line):
+```json
+{"type": "chunk", "content": "partial text..."}
+{"type": "result", "content": "final text...", "metadata": {}}
+```

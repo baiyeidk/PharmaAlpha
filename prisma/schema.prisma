@@ -1,0 +1,93 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── User Model ─────────────────────────────────────────────
+
+model User {
+  id       String  @id @default(cuid())
+  name     String?
+  email    String  @unique
+  password String?
+  image    String?
+
+  conversations Conversation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Agent Models ───────────────────────────────────────────
+
+model Agent {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  displayName String?
+  description String?
+  entryPoint  String
+  config      Json?
+  enabled     Boolean @default(true)
+
+  messages Message[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Chat Models ────────────────────────────────────────────
+
+model Conversation {
+  id     String  @id @default(cuid())
+  title  String?
+  userId String
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Message {
+  id             String  @id @default(cuid())
+  role           String
+  content        String  @db.Text
+  metadata       Json?
+  conversationId String
+  agentId        String?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  agent        Agent?       @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([conversationId])
+  @@index([agentId])
+}
+
+// ─── Task Models (reserved for async agent tasks) ───────────
+
+model Task {
+  id       String @id @default(cuid())
+  type     String
+  status   String @default("pending")
+  input    Json?
+  output   Json?
+  error    String?
+  agentId  String?
+  userId   String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+
+  @@index([status])
+  @@index([userId])
+}

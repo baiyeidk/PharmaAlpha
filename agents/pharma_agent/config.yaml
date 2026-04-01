@@ -1,0 +1,9 @@
+name: pharma_agent
+display_name: Pharma Assistant
+description: A demo pharmaceutical analysis agent that provides drug information and interaction analysis.
+entry_point: pharma_agent/agent.py
+version: "0.1.0"
+capabilities:
+  - drug_info
+  - interaction_check
+  - general_chat
