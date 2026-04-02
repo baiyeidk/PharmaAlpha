@@ -149,21 +149,6 @@ export function StockChart({
   return (
     <div className={cn("relative overflow-hidden", className)}>
       <div ref={containerRef} style={{ height }} />
-      {/* ECG 心电监护仪风格叠加: 扫描线 + 边缘晕光 */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div
-          className="absolute inset-y-0 left-0 w-6"
-          style={{ background: "linear-gradient(to right, white, transparent)" }}
-        />
-        <div
-          className="absolute inset-y-0 right-0 w-6"
-          style={{ background: "linear-gradient(to left, white, transparent)" }}
-        />
-        <div
-          className="absolute bottom-0 left-0 right-0 h-px"
-          style={{ background: effectiveLineColor, opacity: 0.15 }}
-        />
-      </div>
     </div>
   );
 }

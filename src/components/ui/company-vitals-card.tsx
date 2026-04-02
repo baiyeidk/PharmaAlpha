@@ -1,9 +1,9 @@
 "use client";
 
-import { HeartPulse, HeartCrack, Activity, Thermometer, Wind, Droplets } from "lucide-react";
+import { HeartPulse, HeartCrack } from "lucide-react";
 import { ECGCanvas } from "./ecg-canvas";
 import { MiniStockChart } from "./stock-chart";
-import { useStockKline, type KlinePoint } from "@/hooks/use-stock-data";
+import { useStockKline } from "@/hooks/use-stock-data";
 import { cn } from "@/lib/utils";
 
 export interface CompanyVitals {
@@ -26,44 +26,6 @@ export interface CompanyVitals {
   stockCode?: string;
 }
 
-function VitalRow({
-  label,
-  value,
-  status,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  status: "good" | "warn" | "bad";
-  icon: typeof Activity;
-}) {
-  return (
-    <div className="flex items-center gap-2 py-1">
-      <Icon className={cn(
-        "h-5 w-5 shrink-0",
-        status === "good" && "text-vitals-green",
-        status === "warn" && "text-vitals-amber",
-        status === "bad" && "text-vitals-red",
-      )} />
-      <span className="font-mono text-xs tracking-widest text-muted-foreground w-14">{label}</span>
-      <span className={cn(
-        "font-mono text-base font-semibold tabular-nums",
-        status === "good" && "text-vitals-green",
-        status === "warn" && "text-vitals-amber",
-        status === "bad" && "text-vitals-red",
-      )}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function statusToLevel(s: string): "good" | "warn" | "bad" {
-  if (["growing", "healthy", "strong", "positive", "warm"].includes(s)) return "good";
-  if (["stable", "moderate", "neutral"].includes(s)) return "warn";
-  return "bad";
-}
-
 function conditionColor(c: CompanyVitals["overallCondition"]): string {
   if (c === "healthy") return "oklch(0.48 0.20 25)";
   if (c === "irregular") return "oklch(0.50 0.14 80)";
@@ -76,26 +38,24 @@ function conditionLabel(c: CompanyVitals["overallCondition"]): string {
   return "预警";
 }
 
-function StockChartSection({ stockCode, compact, overallCondition }: {
+function StockChartSection({ stockCode, overallCondition }: {
   stockCode?: string;
-  compact: boolean;
   overallCondition: CompanyVitals["overallCondition"];
 }) {
   const { kline, loading } = useStockKline(stockCode || "", "daily", 90);
-  const chartHeight = compact ? 48 : 64;
 
   if (!stockCode || loading || kline.length === 0) {
     return (
       <ECGCanvas
         condition={overallCondition}
         color={conditionColor(overallCondition)}
-        height={chartHeight}
+        height={48}
         speed={overallCondition === "critical" ? 3 : 2}
       />
     );
   }
 
-  return <MiniStockChart data={kline} height={chartHeight} />;
+  return <MiniStockChart data={kline} height={48} />;
 }
 
 interface Props {
@@ -108,53 +68,48 @@ export function CompanyVitalsCard({ data, compact = false, className }: Props) {
   const d = data;
 
   return (
-    <div className={cn("border border-border bg-card/50 overflow-hidden", className)}>
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border/50">
-        <div className="flex items-center gap-2">
+    <div className={cn(
+      "rounded-xl overflow-hidden bg-white/60 border border-black/[0.06] shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition-shadow hover:shadow-md",
+      className,
+    )}>
+      <div className="flex items-center justify-between px-4 py-3">
+        <div className="flex items-center gap-2.5">
           {d.priceUp
-            ? <HeartPulse className="h-7 w-7 text-vitals-green" />
-            : <HeartCrack className="h-7 w-7 text-vitals-red" />
+            ? <HeartPulse className="h-5 w-5 text-vitals-green" />
+            : <HeartCrack className="h-5 w-5 text-vitals-red" />
           }
-          <span className="font-mono text-lg font-bold text-foreground">{d.ticker}</span>
-          <span className="text-sm text-muted-foreground">{d.name}</span>
+          <div className="flex items-baseline gap-1.5">
+            <span className="font-mono text-sm font-bold text-foreground">{d.ticker}</span>
+            <span className="text-xs text-muted-foreground">{d.name}</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-lg font-bold tabular-nums text-foreground">{d.price}</span>
+        <div className="flex items-center gap-2.5">
+          <div className="text-right">
+            <div className="font-mono text-sm font-bold tabular-nums text-foreground">{d.price}</div>
+            <div className={cn(
+              "font-mono text-xs font-semibold tabular-nums",
+              d.priceUp ? "text-vitals-green" : "text-vitals-red"
+            )}>
+              {d.priceChange}
+            </div>
+          </div>
           <span className={cn(
-            "font-mono text-base font-semibold tabular-nums",
-            d.priceUp ? "text-vitals-green" : "text-vitals-red"
-          )}>
-            {d.priceChange}
-          </span>
-          <span className={cn(
-            "font-mono text-xs tracking-widest px-2 py-1 rounded-sm border",
-            d.overallCondition === "healthy" && "text-vitals-green border-vitals-green/30 bg-vitals-green/5",
-            d.overallCondition === "irregular" && "text-vitals-amber border-vitals-amber/30 bg-vitals-amber/5",
-            d.overallCondition === "critical" && "text-vitals-red border-vitals-red/30 bg-vitals-red/5 animate-vitals-blink",
+            "text-[10px] font-medium px-1.5 py-0.5 rounded-md",
+            d.overallCondition === "healthy" && "text-vitals-green bg-vitals-green/8",
+            d.overallCondition === "irregular" && "text-vitals-amber bg-vitals-amber/8",
+            d.overallCondition === "critical" && "text-vitals-red bg-vitals-red/8 animate-vitals-blink",
           )}>
             {conditionLabel(d.overallCondition)}
           </span>
         </div>
       </div>
 
-      {/* 股价走势（真实数据）或 ECG 动画（加载中/无数据时） */}
-      <div className="border-b border-border/50 bg-background/30 relative">
-        <StockChartSection
-          stockCode={d.stockCode}
-          compact={compact}
-          overallCondition={d.overallCondition}
-        />
-        {/* ECG 心电监护仪网格叠加 */}
-        <div className="absolute inset-0 pointer-events-none bg-surgical-grid-fine opacity-30" />
-      </div>
-
       {!compact && (
-        <div className="grid grid-cols-2 gap-x-4 px-3 py-2">
-          <VitalRow label="营收" value={d.revenue} status={statusToLevel(d.revenueStatus)} icon={Activity} />
-          <VitalRow label="市盈率" value={d.pe} status={statusToLevel(d.peStatus)} icon={Droplets} />
-          <VitalRow label="管线" value={d.pipeline} status={statusToLevel(d.pipelineStatus)} icon={HeartPulse} />
-          <VitalRow label="现金流" value={d.cashflow} status={statusToLevel(d.cashflowStatus)} icon={Wind} />
-          <VitalRow label="情绪" value={d.sentiment} status={statusToLevel(d.sentimentStatus)} icon={Thermometer} />
+        <div className="px-1">
+          <StockChartSection
+            stockCode={d.stockCode}
+            overallCondition={d.overallCondition}
+          />
         </div>
       )}
     </div>

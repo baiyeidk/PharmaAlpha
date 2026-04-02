@@ -1,15 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bot, Activity, Scan, Clock } from "lucide-react";
+import { Bot, Clock } from "lucide-react";
 import { ChatMessage } from "./chat-message";
 import { ChatInput } from "./chat-input";
 import { ViewportPanel } from "./viewport-panel";
 import { WelcomeDashboard } from "./welcome-dashboard";
+import { MacWindow } from "@/components/ui/mac-window";
 import { useChatStream } from "@/hooks/use-chat-stream";
 import { useAgents } from "@/hooks/use-agents";
 import { useViewportStore } from "@/stores/viewport-store";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -100,75 +100,66 @@ export function ChatView({ conversationId }: ChatViewProps) {
 
   const noAgent = !agentsLoading && agents.length === 0;
 
+  const chatTitleRight = (
+    <div className="flex items-center gap-2">
+      {agents.length > 0 && (
+        <Select value={selectedAgentId} onValueChange={(v) => { if (v) setSelectedAgentId(v); }}>
+          <SelectTrigger className="h-6 w-[140px] border-black/[0.06] bg-black/[0.03] text-[11px] rounded-md px-2 py-0 text-foreground/70">
+            <SelectValue placeholder="选择智能体" />
+          </SelectTrigger>
+          <SelectContent className="rounded-lg bg-white/90 backdrop-blur-xl border-black/[0.08] shadow-lg">
+            {agents.map((agent) => (
+              <SelectItem key={agent.id} value={agent.id} className="text-[11px] text-foreground rounded-md">
+                <div className="flex items-center gap-1.5">
+                  <Bot className="h-3 w-3 text-scrub" />
+                  {agent.displayName || agent.name}
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+      <button
+        onClick={() => setShowCases(!showCases)}
+        className={cn(
+          "flex items-center gap-1 px-2 py-0.5 rounded-md transition-colors text-[11px]",
+          showCases ? "text-scrub bg-scrub/10" : "text-foreground/50 hover:text-foreground hover:bg-black/[0.04]"
+        )}
+      >
+        <Clock className="h-3 w-3" />
+        历史
+      </button>
+    </div>
+  );
+
   return (
-    <div className="flex h-full flex-col bg-white">
-      <div className="flex flex-1 overflow-hidden">
+    <div className="flex h-full gap-3 p-3 pt-1">
 
-        {/* 左侧：分析对话 */}
-        <div className="flex min-w-0 flex-1 flex-col border-r border-neutral-200">
-          {/* 头部 */}
-          <div className="flex h-11 items-center justify-between border-b border-neutral-200 px-3 font-mono text-sm tracking-widest bg-white text-neutral-900">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5 text-neutral-900">
-                <Activity className="h-5 w-5" />
-                分析面板
-              </div>
-              {selectedAgentId && (
-                <span className="text-scrub flex items-center gap-1">
-                  <div className="h-1 w-1 rounded-full bg-scrub animate-pulse" />
-                  在线
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              {agents.length > 0 && (
-                <Select value={selectedAgentId} onValueChange={(v) => { if (v) setSelectedAgentId(v); }}>
-                  <SelectTrigger className="h-8 w-[200px] border-neutral-200 bg-white text-sm font-mono tracking-wider rounded-sm px-1.5 py-0 text-neutral-900">
-                    <SelectValue placeholder="选择智能体" />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-sm bg-white border-neutral-200">
-                    {agents.map((agent) => (
-                      <SelectItem key={agent.id} value={agent.id} className="font-mono text-sm text-neutral-900">
-                        <div className="flex items-center gap-1.5">
-                          <Bot className="h-5 w-5 text-scrub" />
-                          {agent.displayName || agent.name}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-              <button
-                onClick={() => setShowCases(!showCases)}
-                className={cn(
-                  "flex items-center gap-1 px-1.5 py-0.5 rounded-sm transition-colors text-sm text-neutral-900",
-                  showCases ? "text-scrub bg-scrub/10" : "text-neutral-600 hover:text-neutral-900"
-                )}
-              >
-                <Clock className="h-5 w-5" />
-                历史
-              </button>
-            </div>
-          </div>
-
-          {/* 历史记录抽屉 */}
+      {/* 左侧：对话窗口 */}
+      <MacWindow
+        title="分析面板"
+        titleRight={chatTitleRight}
+        className="flex-1 min-w-0"
+      >
+        <div className="flex flex-col h-full">
+          {/* 历史记录 */}
           {showCases && conversations.length > 0 && (
-            <div className="border-b border-neutral-200 bg-neutral-50 max-h-32 overflow-y-auto">
+            <div className="border-b border-black/[0.04] bg-black/[0.015] max-h-28 overflow-y-auto">
               {conversations.slice(0, 10).map((c) => (
                 <a
                   key={c.id}
                   href={`/chat/${c.id}`}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-neutral-600 hover:text-neutral-900 hover:bg-white transition-colors border-b border-neutral-200/80 last:border-0"
+                  className="flex items-center gap-2 px-4 py-1.5 text-[11px] text-foreground/50 hover:text-foreground hover:bg-black/[0.02] transition-colors"
                 >
-                  <span className="text-neutral-500">{timeAgo(c.updatedAt)}</span>
-                  <span className="truncate text-neutral-800">{c.title}</span>
+                  <span className="opacity-60">{timeAgo(c.updatedAt)}</span>
+                  <span className="truncate">{c.title}</span>
                 </a>
               ))}
             </div>
           )}
 
           {/* 对话内容 */}
-          <ScrollArea className="flex-1" ref={scrollRef}>
+          <div className="flex-1 overflow-y-auto" ref={scrollRef}>
             {messages.length === 0 ? (
               <WelcomeDashboard onSendPrompt={sendMessage} disabled={!selectedAgentId || noAgent} />
             ) : (
@@ -178,28 +169,28 @@ export function ChatView({ conversationId }: ChatViewProps) {
                 ))}
               </div>
             )}
-          </ScrollArea>
+          </div>
 
           {/* 输入栏 */}
-          <ChatInput
-            onSend={sendMessage}
-            onStop={stopGeneration}
-            isLoading={isLoading}
-            disabled={!selectedAgentId || noAgent}
-          />
+          <div className="p-3 pt-0">
+            <ChatInput
+              onSend={sendMessage}
+              onStop={stopGeneration}
+              isLoading={isLoading}
+              disabled={!selectedAgentId || noAgent}
+            />
+          </div>
         </div>
+      </MacWindow>
 
-        {/* 右侧：诊断视窗 */}
-        <div className="hidden w-[42%] shrink-0 lg:flex flex-col">
-          <div className="flex h-11 items-center gap-2 border-b border-neutral-200 px-3 font-mono text-sm tracking-widest bg-white text-neutral-900">
-            <Scan className="h-5 w-5 text-plasma" />
-            <span className="text-plasma">诊断视窗</span>
-          </div>
-          <div className="flex-1 overflow-hidden bg-white">
-            <ViewportPanel />
-          </div>
-        </div>
-      </div>
+      {/* 右侧：诊断视窗 */}
+      <MacWindow
+        title="诊断视窗"
+        className="hidden w-[40%] shrink-0 lg:flex"
+        variant="subtle"
+      >
+        <ViewportPanel />
+      </MacWindow>
     </div>
   );
 }

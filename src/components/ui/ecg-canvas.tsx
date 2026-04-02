@@ -111,20 +111,6 @@ export function ECGCanvas({
     }
     ctx.stroke();
 
-    const fadeW = 20;
-    const bgColor = getComputedStyle(canvas).getPropertyValue("--ecg-bg") || "white";
-    const grad = ctx.createLinearGradient(w - fadeW, 0, w, 0);
-    grad.addColorStop(0, "transparent");
-    grad.addColorStop(1, bgColor);
-    ctx.fillStyle = grad;
-    ctx.fillRect(w - fadeW, 0, fadeW, h);
-
-    const gradL = ctx.createLinearGradient(0, 0, fadeW, 0);
-    gradL.addColorStop(0, bgColor);
-    gradL.addColorStop(1, "transparent");
-    ctx.fillStyle = gradL;
-    ctx.fillRect(0, 0, fadeW, h);
-
     buffer.shift();
     const nextIdx = (Math.floor(offsetRef.current) + buffer.length) % waveLen;
     buffer.push(waveform[nextIdx]);

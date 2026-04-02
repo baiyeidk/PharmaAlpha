@@ -7,16 +7,11 @@ import {
   HeartCrack,
   FileText,
   ImageIcon,
-  Scan,
-  Stethoscope,
   Pill,
   Thermometer,
   Activity,
-  Wind,
-  Droplets,
 } from "lucide-react";
 import { useViewportStore, type ViewportItem } from "@/stores/viewport-store";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { ECGCanvas } from "@/components/ui/ecg-canvas";
 import { StockChart } from "@/components/ui/stock-chart";
 import { useStockKline } from "@/hooks/use-stock-data";
@@ -53,49 +48,27 @@ const wardPatients: CompanyVitals[] = [
 
 function DiagnosticsOverview() {
   return (
-    <ScrollArea className="h-full">
-      <div className="p-4 space-y-5">
-        {/* 板块心电 */}
-        <div>
-          <div className="flex items-center gap-3 mb-3">
-            <Stethoscope className="h-5 w-5 text-scrub" />
-            <span className="font-mono text-sm tracking-widest text-scrub">板块心跳</span>
-          </div>
-          <div className="border border-border bg-card">
-            <ECGCanvas condition="healthy" color="oklch(0.42 0.14 160)" height={64} speed={2} />
-          </div>
-        </div>
-
-        {/* 跟踪企业 */}
-        <div>
-          <div className="flex items-center gap-3 mb-3">
-            <Activity className="h-5 w-5 text-vitals-amber" />
-            <span className="font-mono text-sm tracking-widest text-vitals-amber">重点跟踪</span>
-          </div>
-          <div className="space-y-2">
-            {wardPatients.map((p) => (
-              <CompanyVitalsCard key={p.ticker} data={p} compact />
-            ))}
-          </div>
-        </div>
-
-        {/* 指标说明 */}
-        <div>
-          <div className="flex items-center gap-3 mb-3">
-            <Pill className="h-5 w-5 text-muted-foreground" />
-            <span className="font-mono text-sm tracking-widest text-muted-foreground">指标说明</span>
-          </div>
-          <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
-            <div className="flex items-center gap-2"><Activity className="h-4 w-4 text-vitals-green" /> 营收 = 收入增长趋势</div>
-            <div className="flex items-center gap-2"><Droplets className="h-4 w-4 text-vitals-green" /> 市盈率 = 估值水平</div>
-            <div className="flex items-center gap-2"><HeartPulse className="h-4 w-4 text-vitals-green" /> 管线 = 研发管线强度</div>
-            <div className="flex items-center gap-2"><Wind className="h-4 w-4 text-vitals-green" /> 现金流 = 资金充裕度</div>
-            <div className="flex items-center gap-2"><Thermometer className="h-4 w-4 text-vitals-green" /> 情绪 = 市场热度</div>
-            <div className="flex items-center gap-2"><HeartCrack className="h-4 w-4 text-vitals-red" /> = 健康恶化信号</div>
-          </div>
-        </div>
+    <div className="h-full overflow-y-auto p-4 space-y-4">
+      <div className="flex items-center gap-2 mb-1">
+        <Activity className="h-4 w-4 text-foreground/70" />
+        <span className="text-sm font-semibold text-foreground">重点跟踪</span>
       </div>
-    </ScrollArea>
+      <div className="space-y-2.5">
+        {wardPatients.map((p) => (
+          <CompanyVitalsCard key={p.ticker} data={p} compact />
+        ))}
+      </div>
+
+      <div className="flex items-center gap-2 mt-4 mb-1">
+        <Pill className="h-4 w-4 text-muted-foreground" />
+        <span className="text-xs font-semibold text-muted-foreground">指标说明</span>
+      </div>
+      <div className="grid grid-cols-1 gap-1 text-[11px] text-muted-foreground">
+        <div className="flex items-center gap-2"><HeartPulse className="h-3 w-3 text-vitals-green" /> 红心 = 价格上涨</div>
+        <div className="flex items-center gap-2"><HeartCrack className="h-3 w-3 text-vitals-red" /> 碎心 = 价格下跌</div>
+        <div className="flex items-center gap-2"><Thermometer className="h-3 w-3 text-vitals-amber" /> 温度 = 市场热度</div>
+      </div>
+    </div>
   );
 }
 
@@ -114,14 +87,14 @@ function ChartContent({ item }: { item: ViewportItem }) {
   const { kline, loading } = useStockKline(code, "daily", 90);
 
   return (
-    <div className="flex h-full flex-col p-6 gap-4">
-      <div className="text-center">
-        <p className="font-mono text-lg font-bold text-scrub">{item.title}</p>
+    <div className="flex h-full flex-col p-5 gap-4">
+      <div>
+        <h3 className="text-sm font-bold text-foreground">{item.title}</h3>
         {item.metadata?.description != null && (
-          <p className="mt-1 text-base text-muted-foreground">{String(item.metadata.description)}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{String(item.metadata.description)}</p>
         )}
       </div>
-      <div className="flex-1 min-h-0 border border-border bg-card relative">
+      <div className="flex-1 min-h-0 rounded-lg bg-black/[0.02] border border-black/[0.04] overflow-hidden">
         {loading || kline.length === 0 ? (
           <div className="h-full flex items-center justify-center">
             <ECGCanvas condition="healthy" color="oklch(0.42 0.14 160)" height={200} speed={2} lineWidth={2} />
@@ -136,7 +109,6 @@ function ChartContent({ item }: { item: ViewportItem }) {
             showCrosshair={true}
           />
         )}
-        <div className="absolute inset-0 pointer-events-none bg-surgical-grid-fine opacity-20" />
       </div>
     </div>
   );
@@ -146,9 +118,9 @@ function ViewportContent({ item }: { item: ViewportItem }) {
   switch (item.type) {
     case "image":
       return (
-        <div className="flex h-full items-center justify-center p-5 bg-surgical-grid-fine">
+        <div className="flex h-full items-center justify-center p-5">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={item.url} alt={item.title} className="max-h-full max-w-full rounded-sm border border-border object-contain" />
+          <img src={item.url} alt={item.title} className="max-h-full max-w-full rounded-xl object-contain shadow-md" />
         </div>
       );
     case "pdf":
@@ -157,9 +129,7 @@ function ViewportContent({ item }: { item: ViewportItem }) {
       return <ChartContent item={item} />;
     case "text":
       return (
-        <ScrollArea className="h-full">
-          <div className="p-5 text-base font-mono leading-relaxed text-foreground whitespace-pre-wrap">{item.content}</div>
-        </ScrollArea>
+        <div className="h-full overflow-y-auto p-5 text-sm leading-relaxed text-foreground whitespace-pre-wrap">{item.content}</div>
       );
     default:
       return <DiagnosticsOverview />;
@@ -172,9 +142,9 @@ export function ViewportPanel() {
   const hasItems = items.length > 0;
 
   return (
-    <div className="flex h-full flex-col bg-card/20">
+    <div className="flex h-full flex-col">
       {hasItems && items.length > 1 && (
-        <div className="flex items-center gap-px overflow-x-auto border-b border-border bg-background px-2 py-1.5">
+        <div className="flex items-center gap-1 overflow-x-auto border-b border-black/[0.04] px-3 py-1.5">
           {items.map((item) => {
             const Icon = typeIcons[item.type] || Monitor;
             return (
@@ -182,27 +152,27 @@ export function ViewportPanel() {
                 key={item.id}
                 onClick={() => setActiveItem(item.id)}
                 className={cn(
-                  "flex shrink-0 items-center gap-2 rounded-sm px-3 py-1.5 font-mono text-sm tracking-wider transition-colors",
+                  "flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors",
                   activeItemId === item.id
-                    ? "bg-scrub/10 text-scrub border border-scrub/20"
-                    : "text-muted-foreground hover:text-foreground border border-transparent"
+                    ? "bg-scrub/10 text-scrub font-medium"
+                    : "text-muted-foreground hover:text-foreground hover:bg-black/[0.03]"
                 )}
               >
-                <Icon className="h-5 w-5" />
-                {item.title}
+                <Icon className="h-3.5 w-3.5" />
+                <span className="max-w-[100px] truncate">{item.title}</span>
                 <span
                   role="button"
                   onClick={(e) => { e.stopPropagation(); removeItem(item.id); }}
-                  className="ml-1 p-1 hover:bg-vitals-red/10 hover:text-vitals-red rounded-sm"
+                  className="ml-0.5 p-0.5 hover:bg-vitals-red/10 hover:text-vitals-red rounded-md"
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-3 w-3" />
                 </span>
               </button>
             );
           })}
           <button
             onClick={() => items.forEach((i) => removeItem(i.id))}
-            className="ml-auto shrink-0 font-mono text-sm tracking-wider text-muted-foreground hover:text-vitals-red px-2 transition-colors"
+            className="ml-auto shrink-0 text-[10px] text-muted-foreground hover:text-vitals-red px-2 transition-colors"
           >
             清空
           </button>
@@ -214,8 +184,8 @@ export function ViewportPanel() {
       </div>
 
       {activeItem && (
-        <div className="flex items-center justify-between border-t border-border px-4 py-2 font-mono text-sm text-muted-foreground">
-          <span className="tracking-widest">{activeItem.type}</span>
+        <div className="flex items-center justify-between border-t border-black/[0.04] px-4 py-2 text-[10px] text-muted-foreground">
+          <span>{activeItem.type.toUpperCase()}</span>
           <span>{new Date(activeItem.createdAt).toLocaleTimeString("zh-CN")}</span>
         </div>
       )}

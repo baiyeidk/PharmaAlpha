@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Square, ChevronRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Send, Square } from "lucide-react";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -42,12 +41,7 @@ export function ChatInput({
   }
 
   return (
-    <div className="flex items-center h-14 border-t border-neutral-200 bg-white">
-      <div className="flex items-center gap-1.5 px-3 text-scrub shrink-0">
-        <ChevronRight className="h-5 w-5" />
-        <span className="text-sm tracking-widest text-neutral-900 font-mono">输入</span>
-      </div>
-      <div className="h-full w-px bg-neutral-200" />
+    <div className="flex items-center h-10 rounded-xl bg-black/[0.03] border border-black/[0.06] px-1">
       <input
         ref={inputRef}
         type="text"
@@ -56,28 +50,23 @@ export function ChatInput({
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         disabled={disabled}
-        className="flex-1 h-full bg-transparent px-3 text-lg text-neutral-900 placeholder:text-neutral-400 focus:outline-none disabled:opacity-40"
+        className="flex-1 h-full bg-transparent px-3 text-sm text-foreground placeholder:text-foreground/30 focus:outline-none disabled:opacity-40"
       />
-      <div className="h-full w-px bg-neutral-200" />
       {isLoading ? (
-        <Button
-          size="icon"
-          variant="ghost"
+        <button
           onClick={onStop}
-          className="h-14 w-14 rounded-none text-vitals-red hover:bg-vitals-red/10 hover:text-vitals-red"
+          className="flex h-7 w-7 items-center justify-center rounded-lg text-vitals-red hover:bg-vitals-red/10 transition-colors shrink-0"
         >
-          <Square className="h-6 w-6" />
-        </Button>
+          <Square className="h-3.5 w-3.5" />
+        </button>
       ) : (
-        <Button
-          size="icon"
-          variant="ghost"
+        <button
           onClick={handleSubmit}
           disabled={!input.trim() || disabled}
-          className="h-14 w-14 rounded-none text-scrub hover:bg-scrub/10 hover:text-scrub disabled:opacity-20"
+          className="flex h-7 w-7 items-center justify-center rounded-lg bg-scrub text-white hover:bg-scrub/90 transition-colors disabled:opacity-20 shrink-0"
         >
-          <Send className="h-6 w-6" />
-        </Button>
+          <Send className="h-3.5 w-3.5" />
+        </button>
       )}
     </div>
   );

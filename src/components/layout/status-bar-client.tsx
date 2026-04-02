@@ -1,7 +1,5 @@
 "use client";
 
-import { ECGCanvas } from "@/components/ui/ecg-canvas";
-
 interface Props {
   email: string;
   initials: string;
@@ -9,34 +7,23 @@ interface Props {
 
 export function StatusBarClient({ email, initials }: Props) {
   return (
-    <header className="relative flex h-11 items-center justify-between border-b border-border bg-marrow/50 px-4 font-mono text-xs tracking-wider overflow-hidden">
-      {/* ECG 背景 */}
-      <div className="absolute inset-0 opacity-[0.06] pointer-events-none">
-        <ECGCanvas
-          condition="healthy"
-          color="oklch(0.42 0.14 160)"
-          height={44}
-          speed={1}
-          lineWidth={1}
-        />
-      </div>
-
-      <div className="relative flex items-center gap-4">
-        <div className="flex items-center gap-1.5 text-scrub">
-          <div className="h-2 w-2 rounded-full bg-scrub animate-pulse-glow" />
-          系统正常
+    <header className="flex h-9 items-center justify-between px-5 text-[12px] text-foreground/50">
+      <div className="flex items-center gap-3">
+        <span className="font-semibold text-foreground/70">PharmaAlpha</span>
+        <span className="text-foreground/20">|</span>
+        <div className="flex items-center gap-1.5">
+          <div className="h-1.5 w-1.5 rounded-full bg-[#28C840]" />
+          <span>系统正常</span>
         </div>
-        <div className="h-2.5 w-px bg-border" />
-        <span className="text-muted-foreground">分析就绪</span>
-        <div className="h-2.5 w-px bg-border" />
-        <span className="text-muted-foreground text-xs">
+        <span className="text-foreground/20">|</span>
+        <span>
           {new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" })}
         </span>
       </div>
 
-      <div className="relative flex items-center gap-3">
-        <span className="text-muted-foreground text-xs">{email}</span>
-        <div className="flex h-7 w-7 items-center justify-center rounded-sm border border-scrub/30 bg-scrub/10 text-xs font-bold text-scrub">
+      <div className="flex items-center gap-3">
+        <span>{email}</span>
+        <div className="flex h-6 w-6 items-center justify-center rounded-md bg-scrub/10 text-[10px] font-bold text-scrub">
           {initials}
         </div>
       </div>
