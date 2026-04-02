@@ -3,54 +3,54 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Crosshair,
-  MessageSquare,
   Bot,
-  Settings,
+  BriefcaseBusiness,
+  Crosshair,
   LogOut,
+  MessageSquare,
   Plus,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { href: "/chat", label: "对话", icon: MessageSquare },
-  { href: "/agents", label: "智能体", icon: Bot },
-  { href: "/settings", label: "设置", icon: Settings },
+  { href: "/chat", label: "Chat", icon: MessageSquare },
+  { href: "/investment-team", label: "Investment", icon: BriefcaseBusiness },
+  { href: "/agents", label: "Agents", icon: Bot },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function IconRail() {
   const pathname = usePathname();
 
   return (
-    <div className="flex h-full w-[64px] flex-col items-center py-3 px-2 gap-1">
-      {/* Logo */}
+    <div className="flex h-full w-[64px] flex-col items-center gap-1 px-2 py-3">
       <Link
         href="/chat"
-        className="flex h-10 w-10 items-center justify-center rounded-xl bg-scrub/10 mb-2 hover:bg-scrub/20 transition-all hover:scale-105 active:scale-95"
+        className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-scrub/10 transition-all hover:scale-105 hover:bg-scrub/20 active:scale-95"
         title="PharmaAlpha"
       >
         <Crosshair className="h-5 w-5 text-scrub" />
       </Link>
 
-      {/* New analysis */}
       <Link
         href="/chat"
-        className="flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground hover:text-scrub hover:bg-black/[0.04] transition-all hover:scale-105 active:scale-95"
-        title="新建分析"
+        className="flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-all hover:scale-105 hover:bg-black/[0.04] hover:text-scrub active:scale-95"
+        title="New Analysis"
       >
         <Plus className="h-5 w-5" />
       </Link>
 
-      <div className="my-1.5 h-px w-8 bg-black/[0.06] rounded-full" />
+      <div className="my-1.5 h-px w-8 rounded-full bg-black/[0.06]" />
 
-      {/* Navigation - dock style */}
-      <div className="flex flex-col items-center gap-1 rounded-2xl bg-[#f6f5f4]/70 backdrop-blur-xl border border-black/[0.05] p-1.5 shadow-[0_1px_4px_rgba(0,0,0,0.03)]">
+      <div className="flex flex-col items-center gap-1 rounded-2xl border border-black/[0.05] bg-[#f6f5f4]/70 p-1.5 shadow-[0_1px_4px_rgba(0,0,0,0.03)] backdrop-blur-xl">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive =
             item.href === "/chat"
               ? pathname === "/chat" || pathname.startsWith("/chat/")
               : pathname.startsWith(item.href);
+
           return (
             <Link
               key={item.href}
@@ -59,8 +59,8 @@ export function IconRail() {
               className={cn(
                 "flex h-10 w-10 items-center justify-center rounded-xl transition-all hover:scale-110 active:scale-95",
                 isActive
-                  ? "text-scrub bg-scrub/10 shadow-sm"
-                  : "text-foreground/50 hover:text-foreground hover:bg-black/[0.04]"
+                  ? "bg-scrub/10 text-scrub shadow-sm"
+                  : "text-foreground/50 hover:bg-black/[0.04] hover:text-foreground"
               )}
             >
               <Icon className="h-5 w-5" />
@@ -69,13 +69,13 @@ export function IconRail() {
         })}
       </div>
 
-      {/* Active dot indicator below dock */}
-      <div className="flex gap-1.5 mt-1">
+      <div className="mt-1 flex gap-1.5">
         {navItems.map((item) => {
           const isActive =
             item.href === "/chat"
               ? pathname === "/chat" || pathname.startsWith("/chat/")
               : pathname.startsWith(item.href);
+
           return (
             <div
               key={item.href}
@@ -90,14 +90,13 @@ export function IconRail() {
 
       <div className="flex-1" />
 
-      {/* Logout */}
       <button
         onClick={async () => {
           await fetch("/api/auth/logout", { method: "POST" });
           window.location.href = "/login";
         }}
-        title="退出登录"
-        className="flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground hover:text-vitals-red hover:bg-vitals-red/5 transition-all hover:scale-105 active:scale-95 mb-1"
+        title="Logout"
+        className="mb-1 flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-all hover:scale-105 hover:bg-vitals-red/5 hover:text-vitals-red active:scale-95"
       >
         <LogOut className="h-5 w-5" />
       </button>

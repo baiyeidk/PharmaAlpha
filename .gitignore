@@ -35,6 +35,7 @@ yarn-error.log*
 .env.local
 .env.production
 .env.development
+.env.*
 
 # vercel
 .vercel
@@ -45,3 +46,15 @@ next-env.d.ts
 
 /src/generated/prisma
 /uploads
+
+# python
+__pycache__/
+*.py[cod]
+
+# local dev logs
+.next-dev.log
+.next-dev.err.log
+
+# local caches
+agents/**/.cache/
+agents/**/.logs/

@@ -10,6 +10,7 @@ import {
   Plus,
   Crosshair,
   Clock,
+  BriefcaseBusiness,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -18,6 +19,7 @@ import { useConversations } from "@/hooks/use-conversations";
 
 const navItems = [
   { href: "/chat", label: "OPERATIONS", icon: MessageSquare },
+  { href: "/investment-team", label: "INVESTMENT", icon: BriefcaseBusiness },
   { href: "/agents", label: "AGENTS", icon: Bot },
   { href: "/settings", label: "CONFIG", icon: Settings },
 ];

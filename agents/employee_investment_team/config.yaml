@@ -1,0 +1,14 @@
+name: employee_investment_team
+display_name: Employee Investment Team
+description: Employee profile driven investment team agent with SOP extraction, multi-role discussion, and social notification hooks.
+entry_point: employee_investment_team/agent.py
+version: "0.1.0"
+capabilities:
+  - employee_skill
+  - profile_management
+  - sop_extraction
+  - team_orchestration
+  - data_analysis
+  - financial_analysis
+  - policy_monitoring
+  - social_notification

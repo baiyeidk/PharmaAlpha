@@ -2,9 +2,12 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { executeAgent, sseEncoder, sseHeaders, getAgentById } from "@/lib/agents";
+import { ensureEmployeeContext } from "@/lib/employee-investment";
 import type { AgentOutputChunk } from "@/lib/agents";
 import { executeCanvasTool } from "@/lib/agents/canvas-tools";
 import { getCanvasSystemMessage, getCanvasToolsForLLM } from "@/lib/agents/tool-definitions";
+
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   const session = await getSession();
@@ -55,12 +58,19 @@ export async function POST(req: Request) {
     content: getCanvasSystemMessage(),
   };
   const messagesWithTools = [toolSystemMsg, ...messages];
+  const employeeContext =
+    agent.name === "employee_investment_team"
+      ? await ensureEmployeeContext(session)
+      : null;
 
   const agentStream = executeAgent(agent.entryPoint, {
     action: "chat",
     messages: messagesWithTools,
     session_id: convId,
     tools: getCanvasToolsForLLM(),
+    params: employeeContext
+      ? { employee_id: employeeContext.employeeCode }
+      : undefined,
   });
 
   const chunks: string[] = [];

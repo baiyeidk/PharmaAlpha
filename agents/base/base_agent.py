@@ -28,6 +28,7 @@ class BaseAgent(ABC):
     def run(self) -> None:
         """Main entry point: read stdin, execute, write stdout."""
         try:
+            self._configure_stdio()
             raw = sys.stdin.readline().strip()
             if not raw:
                 self._emit(AgentError(content="Empty input"))
@@ -70,3 +71,11 @@ class BaseAgent(ABC):
         line = json.dumps(output.to_json(), ensure_ascii=False)
         sys.stdout.write(line + "\n")
         sys.stdout.flush()
+
+    @staticmethod
+    def _configure_stdio() -> None:
+        """Force UTF-8 stdio on Windows so JSON payloads preserve Chinese text."""
+        for stream in (sys.stdin, sys.stdout, sys.stderr):
+            reconfigure = getattr(stream, "reconfigure", None)
+            if callable(reconfigure):
+                reconfigure(encoding="utf-8")

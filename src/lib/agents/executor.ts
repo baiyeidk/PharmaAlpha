@@ -14,7 +14,10 @@ export function executeAgent(
   input: AgentInput,
   options: ExecuteOptions = {}
 ): ReadableStream<AgentOutputChunk> {
-  const { timeout = 120_000, pythonPath = "python3" } = options;
+  const defaultPythonPath =
+    process.env.PYTHON_PATH ||
+    (process.platform === "win32" ? "python" : "python3");
+  const { timeout = 120_000, pythonPath = defaultPythonPath } = options;
 
   const agentPath = path.isAbsolute(entryPoint)
     ? entryPoint
@@ -33,6 +36,8 @@ export function executeAgent(
           PYTHONPATH: AGENTS_DIR,
           CANVAS_API_BASE: `http://localhost:${port}/api/canvas`,
           CANVAS_API_KEY: apiKey,
+          PYTHONIOENCODING: "utf-8",
+          PYTHONUTF8: "1",
         },
       });
 
@@ -46,14 +51,15 @@ export function executeAgent(
         controller.close();
       }, timeout);
 
-      proc.stdin.write(JSON.stringify(input) + "\n");
+      proc.stdin.setDefaultEncoding("utf8");
+      proc.stdin.write(Buffer.from(`${JSON.stringify(input)}\n`, "utf8"));
       proc.stdin.end();
 
       let buffer = "";
       let stderr = "";
 
       proc.stdout.on("data", (data: Buffer) => {
-        buffer += data.toString();
+        buffer += data.toString("utf8");
         const lines = buffer.split("\n");
         buffer = lines.pop() ?? "";
 
@@ -72,7 +78,7 @@ export function executeAgent(
       });
 
       proc.stderr.on("data", (data: Buffer) => {
-        stderr += data.toString();
+        stderr += data.toString("utf8");
       });
 
       proc.on("close", (code) => {

@@ -16,7 +16,8 @@ model User {
   password String?
   image    String?
 
-  conversations Conversation[]
+  employeeProfile EmployeeProfile?
+  conversations  Conversation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -144,4 +145,298 @@ model Task {
 
   @@index([status])
   @@index([userId])
+}
+
+model EmployeeProfile {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  employeeCode String   @unique
+  displayName  String
+  title        String
+  department   String
+  focusAreas   String[]
+  tags         String[]
+  preferences  Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user                User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  socialAccounts      EmployeeSocialAccount[]
+  observations        EmployeeObservation[]
+  investmentBehaviors EmployeeInvestmentBehavior[]
+  skills              SkillDefinition[]
+  initiatedProjects   InvestmentProject[]       @relation("ProjectInitiator")
+  projectMemberships  InvestmentProjectMember[]
+  workflowDrafts      WorkflowDraft[]
+  workflowExecutions  WorkflowExecution[]
+}
+
+model EmployeeSocialAccount {
+  id                String   @id @default(cuid())
+  employeeProfileId String
+  platform          String
+  accountRef        String
+  webhookUrl        String?
+  isActive          Boolean  @default(true)
+  metadata          Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  employeeProfile EmployeeProfile @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+
+  @@index([employeeProfileId])
+  @@unique([employeeProfileId, platform, accountRef])
+}
+
+model EmployeeObservation {
+  id                String   @id @default(cuid())
+  employeeProfileId String
+  category          String
+  title             String?
+  content           String   @db.Text
+  source            String?
+  metadata          Json?
+  observedAt        DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  employeeProfile EmployeeProfile @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+
+  @@index([employeeProfileId])
+  @@index([category])
+}
+
+model EmployeeInvestmentBehavior {
+  id                String   @id @default(cuid())
+  employeeProfileId String
+  target            String
+  action            String
+  thesis            String?  @db.Text
+  outcome           String?
+  metadata          Json?
+  decidedAt         DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  employeeProfile EmployeeProfile @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+
+  @@index([employeeProfileId])
+  @@index([target])
+  @@index([action])
+}
+
+model SkillDefinition {
+  id                String   @id @default(cuid())
+  employeeProfileId String
+  name              String
+  description       String   @db.Text
+  category          String?
+  mergeMode         String   @default("parallel")
+  enabled           Boolean  @default(true)
+  metadata          Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  employeeProfile EmployeeProfile @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  scripts         SkillScript[]
+  sops            SkillSop[]
+  workflowNodes   WorkflowNode[]
+
+  @@index([employeeProfileId])
+  @@unique([employeeProfileId, name])
+}
+
+model SkillScript {
+  id                String   @id @default(cuid())
+  skillDefinitionId String
+  name              String
+  description       String?  @db.Text
+  language          String
+  entryPoint        String?
+  content           String   @db.Text
+  version           Int      @default(1)
+  checksum          String?
+  isActive          Boolean  @default(true)
+  metadata          Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  skillDefinition SkillDefinition @relation(fields: [skillDefinitionId], references: [id], onDelete: Cascade)
+
+  @@index([skillDefinitionId])
+  @@unique([skillDefinitionId, name, version])
+}
+
+model SkillSop {
+  id                String   @id @default(cuid())
+  skillDefinitionId String
+  name              String
+  description       String?  @db.Text
+  config            Json?
+  isDefault         Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  skillDefinition SkillDefinition @relation(fields: [skillDefinitionId], references: [id], onDelete: Cascade)
+  workflowNodes   WorkflowNode[]
+
+  @@index([skillDefinitionId])
+  @@unique([skillDefinitionId, name])
+}
+
+model WorkflowDraft {
+  id                String   @id @default(cuid())
+  employeeProfileId String
+  investmentProjectId String?
+  topic             String   @db.Text
+  status            String   @default("draft")
+  selectedSkills    Json?
+  config            Json?
+  confirmedAt       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  employeeProfile   EmployeeProfile    @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  investmentProject InvestmentProject? @relation(fields: [investmentProjectId], references: [id], onDelete: SetNull)
+  nodes             WorkflowNode[]
+  executions        WorkflowExecution[]
+
+  @@index([employeeProfileId])
+  @@index([investmentProjectId])
+  @@index([status])
+}
+
+model WorkflowNode {
+  id                String   @id @default(cuid())
+  workflowDraftId   String
+  nodeKey           String
+  nodeType          String
+  title             String
+  dependsOn         Json?
+  enabled           Boolean  @default(true)
+  mergeMode         String?
+  skillDefinitionId String?
+  skillSopId        String?
+  params            Json?
+  position          Int?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  workflowDraft       WorkflowDraft            @relation(fields: [workflowDraftId], references: [id], onDelete: Cascade)
+  skillDefinition     SkillDefinition?         @relation(fields: [skillDefinitionId], references: [id], onDelete: SetNull)
+  skillSop            SkillSop?                @relation(fields: [skillSopId], references: [id], onDelete: SetNull)
+  nodeRuns            WorkflowNodeRun[]
+  currentExecutions   WorkflowExecution[]      @relation("ExecutionCurrentNode")
+  executionEvents     WorkflowExecutionEvent[]
+
+  @@index([workflowDraftId])
+  @@index([nodeType])
+  @@index([skillDefinitionId])
+  @@index([skillSopId])
+  @@unique([workflowDraftId, nodeKey])
+}
+
+model WorkflowExecution {
+  id                String   @id @default(cuid())
+  workflowDraftId   String
+  employeeProfileId String
+  currentWorkflowNodeId String?
+  status            String   @default("pending")
+  summary           String?  @db.Text
+  metadata          Json?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  workflowDraft      WorkflowDraft         @relation(fields: [workflowDraftId], references: [id], onDelete: Cascade)
+  employeeProfile    EmployeeProfile       @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  currentWorkflowNode WorkflowNode?        @relation("ExecutionCurrentNode", fields: [currentWorkflowNodeId], references: [id], onDelete: SetNull)
+  nodeRuns           WorkflowNodeRun[]
+  events             WorkflowExecutionEvent[]
+
+  @@index([workflowDraftId])
+  @@index([employeeProfileId])
+  @@index([currentWorkflowNodeId])
+  @@index([status])
+}
+
+model WorkflowNodeRun {
+  id                  String   @id @default(cuid())
+  workflowExecutionId String
+  workflowNodeId      String
+  status              String   @default("pending")
+  input               Json?
+  output              Json?
+  error               String?  @db.Text
+  startedAt           DateTime?
+  finishedAt          DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  workflowExecution WorkflowExecution @relation(fields: [workflowExecutionId], references: [id], onDelete: Cascade)
+  workflowNode      WorkflowNode      @relation(fields: [workflowNodeId], references: [id], onDelete: Cascade)
+
+  @@index([workflowExecutionId])
+  @@index([workflowNodeId])
+  @@index([status])
+}
+
+model InvestmentProject {
+  id                 String   @id @default(cuid())
+  employeeProfileId  String
+  projectCode        String   @unique
+  title              String
+  topic              String   @db.Text
+  status             String   @default("draft")
+  objective          String?  @db.Text
+  priority           String?
+  config             Json?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  initiator      EmployeeProfile          @relation("ProjectInitiator", fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  members        InvestmentProjectMember[]
+  workflowDrafts WorkflowDraft[]
+
+  @@index([employeeProfileId])
+  @@index([status])
+}
+
+model InvestmentProjectMember {
+  id                 String   @id @default(cuid())
+  investmentProjectId String
+  employeeProfileId  String
+  role               String
+  isInitiator        Boolean  @default(false)
+  status             String   @default("active")
+  metadata           Json?
+  joinedAt           DateTime @default(now())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  investmentProject InvestmentProject @relation(fields: [investmentProjectId], references: [id], onDelete: Cascade)
+  employeeProfile   EmployeeProfile   @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+
+  @@index([investmentProjectId])
+  @@index([employeeProfileId])
+  @@unique([investmentProjectId, employeeProfileId])
+}
+
+model WorkflowExecutionEvent {
+  id                  String   @id @default(cuid())
+  workflowExecutionId String
+  workflowNodeId      String?
+  eventType           String
+  message             String?
+  payload             Json?
+  occurredAt          DateTime @default(now())
+  createdAt           DateTime @default(now())
+
+  workflowExecution WorkflowExecution @relation(fields: [workflowExecutionId], references: [id], onDelete: Cascade)
+  workflowNode      WorkflowNode?     @relation(fields: [workflowNodeId], references: [id], onDelete: SetNull)
+
+  @@index([workflowExecutionId])
+  @@index([workflowNodeId])
+  @@index([eventType])
 }
