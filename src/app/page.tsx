@@ -2,115 +2,127 @@
 
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
-import { Activity } from "lucide-react";
+import { HeartPulse, HeartCrack, Stethoscope, ShieldCheck, Microscope } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const tickerData = [
-  { sym: "PFE", price: "42.38", change: "+2.1%", up: true },
-  { sym: "JNJ", price: "156.22", change: "-0.4%", up: false },
-  { sym: "MRK", price: "128.55", change: "+1.8%", up: true },
-  { sym: "ABBV", price: "184.32", change: "+0.9%", up: true },
-  { sym: "LLY", price: "792.10", change: "-1.2%", up: false },
-  { sym: "BMY", price: "51.83", change: "+3.2%", up: true },
-  { sym: "AMGN", price: "286.47", change: "-0.6%", up: false },
-  { sym: "GILD", price: "84.26", change: "+1.4%", up: true },
-  { sym: "AZN", price: "67.91", change: "+0.7%", up: true },
-  { sym: "NVO", price: "138.45", change: "-2.1%", up: false },
+const vitals = [
+  { label: "沪深医药", value: "8,247", delta: "+1.24%", up: true },
+  { label: "中证医疗", value: "12,385", delta: "-0.38%", up: false },
+  { label: "生物医药ETF", value: "1.042", delta: "+0.82%", up: true },
+  { label: "创新药指数", value: "3,618", delta: "+0.45%", up: true },
 ];
-
-function TickerStrip() {
-  const items = [...tickerData, ...tickerData];
-  return (
-    <div className="absolute inset-x-0 bottom-0 h-8 border-t border-border/40 overflow-hidden bg-background/50">
-      <div className="ticker-scroll flex h-full items-center gap-8 whitespace-nowrap px-4">
-        {items.map((t, i) => (
-          <span key={i} className="flex items-center gap-1.5 font-mono text-[10px]">
-            <span className="text-muted-foreground">{t.sym}</span>
-            <span className={t.up ? "text-pa-green" : "text-pa-red"}>
-              {t.up ? "▲" : "▽"}
-            </span>
-            <span className="text-muted-foreground">{t.price}</span>
-            <span className={t.up ? "text-pa-green" : "text-pa-red"}>
-              ({t.change})
-            </span>
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 export default function LandingPage() {
   return (
-    <div className="relative flex min-h-full flex-col items-center justify-center overflow-hidden bg-background">
-      <div className="absolute inset-0 bg-dot-grid opacity-40" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,oklch(0.95_0.01_195)_0%,transparent_70%)]" />
+    <div className="relative flex min-h-full flex-col items-center justify-center overflow-hidden">
+      {/* macOS wallpaper gradient */}
+      <div className="absolute inset-0 bg-gradient-to-br from-[#f0eee9] via-[#eae8e4] to-[#ede9e3]" />
 
-      <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 pointer-events-none opacity-[0.12]">
-        <svg
-          className="w-full h-32"
-          viewBox="0 0 1200 100"
-          preserveAspectRatio="none"
-          fill="none"
-        >
-          <path
-            d="M0,60 L280,60 L320,60 L345,18 L370,85 L395,35 L415,60 L500,58 L580,54 L660,48 L740,44 L820,40 L900,36 L980,33 L1060,38 L1140,35 L1200,34"
-            stroke="oklch(0.47 0.14 195)"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="ecg-line"
-          />
-        </svg>
-      </div>
-
-      <div className="relative z-10 flex flex-col items-center gap-10 px-8">
-        <div className="relative">
-          <div className="absolute -inset-6 rounded-3xl bg-pa-cyan/8 blur-3xl" />
-          <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl border border-pa-cyan/25 bg-white shadow-sm">
-            <Activity className="h-10 w-10 text-pa-cyan" />
-          </div>
-        </div>
-
-        <div className="flex flex-col items-center gap-4 text-center">
-          <h1 className="text-5xl font-bold tracking-tight text-foreground">
-            PharmaAlpha
-          </h1>
-          <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.3em] text-pa-amber">
-            <span className="h-px w-10 bg-pa-amber/30" />
-            Pharmaceutical Investment Intelligence
-            <span className="h-px w-10 bg-pa-amber/30" />
-          </div>
-          <p className="mt-2 max-w-lg text-sm leading-relaxed text-muted-foreground">
-            AI-powered agent platform bridging pharmaceutical research
-            and capital markets. Real-time analysis, data-driven insights,
-            and intelligent decision support.
-          </p>
-        </div>
-
-        <div className="flex gap-3">
-          <Link
-            href="/login"
-            className={cn(
-              buttonVariants({ size: "lg" }),
-              "bg-pa-cyan text-white font-medium hover:bg-pa-cyan/90 px-8"
-            )}
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/register"
-            className={cn(
-              buttonVariants({ variant: "outline", size: "lg" }),
-              "border-pa-cyan/30 text-pa-cyan hover:bg-pa-cyan/5 hover:border-pa-cyan/50 px-8"
-            )}
-          >
-            Create account
-          </Link>
+      {/* Floating ticker bar at top */}
+      <div className="absolute top-0 inset-x-0 h-8 flex items-center px-6 text-[11px] text-foreground/40 overflow-hidden z-10">
+        <div className="ticker-scroll flex items-center gap-6 whitespace-nowrap">
+          {[...vitals, ...vitals, ...vitals].map((v, i) => (
+            <span key={i} className="flex items-center gap-1">
+              <span>{v.label}</span>
+              <span className="text-foreground/60">{v.value}</span>
+              <span className={cn("flex items-center gap-0.5", v.up ? "text-vitals-green" : "text-vitals-red")}>
+                {v.up ? <HeartPulse className="h-3 w-3" /> : <HeartCrack className="h-3 w-3" />}
+                {v.delta}
+              </span>
+            </span>
+          ))}
         </div>
       </div>
 
-      <TickerStrip />
+      {/* Main macOS Window card */}
+      <div className="relative z-10 w-full max-w-[640px] mx-auto">
+        <div className="rounded-2xl overflow-hidden bg-[#f6f5f4]/80 backdrop-blur-2xl shadow-[0_4px_24px_rgba(0,0,0,0.06),0_1px_4px_rgba(0,0,0,0.04)] border border-black/[0.05]">
+          {/* Title bar */}
+          <div className="flex h-12 items-center px-4 gap-3 border-b border-black/[0.05] bg-[#eceae8]/50">
+            <div className="flex items-center gap-[7px]">
+              <div className="h-3 w-3 rounded-full bg-[#EC6A5E] border border-[#D1503F]/40" />
+              <div className="h-3 w-3 rounded-full bg-[#F4BF4F] border border-[#D49E28]/40" />
+              <div className="h-3 w-3 rounded-full bg-[#61C554] border border-[#4CA93B]/40" />
+            </div>
+            <span className="text-[13px] text-foreground/50 font-medium">PharmaAlpha</span>
+          </div>
+
+          {/* Content */}
+          <div className="flex flex-col items-center gap-8 px-10 py-12">
+            {/* Logo */}
+            <div className="relative">
+              <div className="absolute -inset-6 bg-scrub/5 blur-3xl rounded-full" />
+              <svg viewBox="0 0 80 80" className="relative h-20 w-20" fill="none">
+                <rect x="2" y="2" width="76" height="76" rx="16" stroke="oklch(0.42 0.14 160)" strokeWidth="1.5" strokeDasharray="4 4" />
+                <path
+                  d="M40,52 C32,46 24,40 24,33 C24,28 28,24 33,24 C36,24 38,25 40,28 C42,25 44,24 47,24 C52,24 56,28 56,33 C56,40 48,46 40,52Z"
+                  stroke="oklch(0.42 0.14 160)"
+                  strokeWidth="1.5"
+                  fill="oklch(0.42 0.14 160 / 12%)"
+                />
+                <polyline
+                  points="24,38 33,38 36,30 40,46 44,34 47,38 56,38"
+                  stroke="oklch(0.42 0.14 160)"
+                  strokeWidth="1.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+
+            <div className="text-center space-y-3">
+              <h1 className="text-4xl font-bold tracking-tight text-foreground">
+                Pharma<span className="text-scrub">Alpha</span>
+              </h1>
+              <p className="text-sm text-foreground/50 max-w-sm leading-relaxed">
+                AI 驱动的医药投资精准诊断平台，多维度解剖企业健康状况
+              </p>
+            </div>
+
+            {/* Stats */}
+            <div className="flex items-center gap-8">
+              {[
+                { n: "1,247", label: "诊断分析", icon: Microscope },
+                { n: "98.6%", label: "预测精度", icon: HeartPulse },
+                { n: "<2秒", label: "响应速度", icon: Stethoscope },
+              ].map((s) => {
+                const Icon = s.icon;
+                return (
+                  <div key={s.label} className="text-center">
+                    <Icon className="h-5 w-5 text-scrub mx-auto mb-1" />
+                    <div className="text-2xl font-bold tabular-nums text-scrub">{s.n}</div>
+                    <div className="text-[11px] text-foreground/40 mt-0.5">{s.label}</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Buttons */}
+            <div className="flex gap-3 w-full">
+              <Link
+                href="/login"
+                className={cn(
+                  buttonVariants({ size: "lg" }),
+                  "flex-1 bg-scrub text-white font-semibold hover:bg-scrub/90 rounded-xl gap-2 h-11"
+                )}
+              >
+                <Stethoscope className="h-5 w-5" />
+                登录系统
+              </Link>
+              <Link
+                href="/register"
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "lg" }),
+                  "flex-1 border-black/[0.08] text-foreground/70 font-semibold hover:bg-black/[0.03] rounded-xl gap-2 h-11"
+                )}
+              >
+                <ShieldCheck className="h-5 w-5" />
+                注册账号
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

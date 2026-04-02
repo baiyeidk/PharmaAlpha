@@ -55,6 +55,85 @@ class AgentToolCall:
     def to_json(self) -> dict[str, Any]:
         return {"type": self.type, "name": self.name, "args": self.args}
 
+    # ── Canvas convenience constructors ──────────────────────
+
+    @staticmethod
+    def canvas_add_chart(
+        label: str,
+        tickers: list[str],
+        description: str = "",
+    ) -> "AgentToolCall":
+        """Add a stock chart node to the canvas."""
+        args: dict[str, Any] = {"type": "chart", "label": label, "tickers": tickers}
+        if description:
+            args["description"] = description
+        return AgentToolCall(name="canvas.add_node", args=args)
+
+    @staticmethod
+    def canvas_add_text(
+        label: str,
+        content: str,
+        description: str = "",
+    ) -> "AgentToolCall":
+        """Add a text note node to the canvas."""
+        args: dict[str, Any] = {"type": "text", "label": label, "content": content}
+        if description:
+            args["description"] = description
+        return AgentToolCall(name="canvas.add_node", args=args)
+
+    @staticmethod
+    def canvas_add_image(
+        label: str,
+        url: str = "",
+        description: str = "",
+    ) -> "AgentToolCall":
+        """Add an image node to the canvas."""
+        args: dict[str, Any] = {"type": "image", "label": label}
+        if url:
+            args["url"] = url
+        if description:
+            args["description"] = description
+        return AgentToolCall(name="canvas.add_node", args=args)
+
+    @staticmethod
+    def canvas_add_pdf(
+        label: str,
+        url: str = "",
+        description: str = "",
+    ) -> "AgentToolCall":
+        """Add a PDF node to the canvas."""
+        args: dict[str, Any] = {"type": "pdf", "label": label}
+        if url:
+            args["url"] = url
+        if description:
+            args["description"] = description
+        return AgentToolCall(name="canvas.add_node", args=args)
+
+    @staticmethod
+    def canvas_remove_node(node_id: str) -> "AgentToolCall":
+        """Remove a node from the canvas."""
+        return AgentToolCall(name="canvas.remove_node", args={"nodeId": node_id})
+
+    @staticmethod
+    def canvas_update_node(
+        node_id: str,
+        label: str | None = None,
+        content: str | None = None,
+        tickers: list[str] | None = None,
+        description: str | None = None,
+    ) -> "AgentToolCall":
+        """Update an existing canvas node."""
+        args: dict[str, Any] = {"nodeId": node_id}
+        if label is not None:
+            args["label"] = label
+        if content is not None:
+            args["content"] = content
+        if tickers is not None:
+            args["tickers"] = tickers
+        if description is not None:
+            args["description"] = description
+        return AgentToolCall(name="canvas.update_node", args=args)
+
 
 @dataclass
 class AgentResult:

@@ -46,13 +46,67 @@ model Conversation {
   title  String?
   userId String
 
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages Message[]
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages    Message[]
+  canvasNodes CanvasNode[]
+  canvasEdges CanvasEdge[]
+  files       ConversationFile[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+}
+
+model ConversationFile {
+  id             String @id @default(cuid())
+  conversationId String
+  filename       String
+  originalName   String
+  mimeType       String
+  size           Int
+  path           String
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([conversationId])
+}
+
+model CanvasNode {
+  id             String @id @default(cuid())
+  conversationId String
+  type           String // chart | image | pdf | text
+  label          String @default("")
+  positionX      Float  @default(0)
+  positionY      Float  @default(0)
+  width          Float  @default(320)
+  height         Float  @default(240)
+  data           Json?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([conversationId])
+}
+
+model CanvasEdge {
+  id             String  @id @default(cuid())
+  conversationId String
+  sourceNodeId   String
+  targetNodeId   String
+  animated       Boolean @default(true)
+  style          Json?
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([conversationId])
 }
 
 model Message {

@@ -1,15 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Bot, PanelRightOpen, PanelRightClose } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Bot, Clock, HeartPulse, ImageIcon, FileText, Type, Plus } from "lucide-react";
 import { ChatMessage } from "./chat-message";
 import { ChatInput } from "./chat-input";
-import { ViewportPanel } from "./viewport-panel";
 import { WelcomeDashboard } from "./welcome-dashboard";
+import { MacWindow } from "@/components/ui/mac-window";
+import dynamic from "next/dynamic";
+
+const InfiniteCanvas = dynamic(
+  () => import("@/components/canvas/infinite-canvas").then((m) => m.InfiniteCanvas),
+  { ssr: false, loading: () => <div className="flex-1 flex items-center justify-center"><div className="h-5 w-5 rounded-full border-2 border-foreground/20 border-t-foreground/60 animate-spin" /></div> },
+);
 import { useChatStream } from "@/hooks/use-chat-stream";
 import { useAgents } from "@/hooks/use-agents";
-import { useViewportStore } from "@/stores/viewport-store";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { useCanvasStore } from "@/stores/canvas-store";
+import type { CanvasNodeType } from "@/stores/canvas-store";
 import {
   Select,
   SelectContent,
@@ -17,46 +23,34 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useConversations } from "@/hooks/use-conversations";
 
 const PHARMA_TICKERS = new Set([
-  "PFE","JNJ","MRK","ABBV","LLY","BMY","AMGN","GILD","AZN","NVO",
-  "SNY","GSK","REGN","VRTX","BIIB","MRNA","BNTX","ZTS","BAX","BDX",
-  "MDT","ABT","TMO","DHR","SYK","ISRG","BSX","EW","HCA","UNH",
+  "600276","603259","300760","600436","600196","688235",
+  "002007","300122","300347","000661","300015","002422",
+  "300529","603392","688180","300558","002252","600216",
+  "688658","300595","恒瑞医药","药明康德","迈瑞医疗","片仔癀",
+  "复星医药","百济神州","华兰生物","智飞生物","泰格医药","长春高新",
 ]);
 
 function extractTickers(text: string): string[] {
-  const words = text.match(/\b[A-Z]{2,5}\b/g) || [];
-  return [...new Set(words.filter((w) => PHARMA_TICKERS.has(w)))];
+  const codePattern = /\b\d{6}\b/g;
+  const namePattern = /(?:恒瑞医药|药明康德|迈瑞医疗|片仔癀|复星医药|百济神州|华兰生物|智飞生物|泰格医药|长春高新)/g;
+  const codes = text.match(codePattern) || [];
+  const names = text.match(namePattern) || [];
+  return [...new Set([...codes, ...names].filter((w) => PHARMA_TICKERS.has(w)))];
 }
 
-function AgentSelect({
-  agents,
-  value,
-  onChange,
-}: {
-  agents: { id: string; name: string; displayName: string | null }[];
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <Select value={value} onValueChange={(v) => { if (v) onChange(v); }}>
-      <SelectTrigger className="w-[200px] h-9 bg-card/50 border-border/40 text-sm font-mono">
-        <SelectValue placeholder="Select agent" />
-      </SelectTrigger>
-      <SelectContent>
-        {agents.map((agent) => (
-          <SelectItem key={agent.id} value={agent.id} className="text-sm font-mono">
-            <div className="flex items-center gap-2">
-              <Bot className="h-3 w-3 text-pa-cyan" />
-              {agent.displayName || agent.name}
-            </div>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "刚刚";
+  if (mins < 60) return `${mins}分钟前`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}小时前`;
+  const days = Math.floor(hours / 24);
+  return `${days}天前`;
 }
 
 interface ChatViewProps {
@@ -66,9 +60,13 @@ interface ChatViewProps {
 export function ChatView({ conversationId }: ChatViewProps) {
   const { agents, loading: agentsLoading } = useAgents();
   const [selectedAgentId, setSelectedAgentId] = useState<string>("");
-  const { isOpen: viewportOpen, togglePanel, pushItem } = useViewportStore();
+  const addNodeAndSave = useCanvasStore((s) => s.addNodeAndSave);
+  const loadFromServer = useCanvasStore((s) => s.loadFromServer);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastCheckedRef = useRef<string>("");
+  const { conversations } = useConversations();
+  const [showCases, setShowCases] = useState(false);
+  const [activeConvId, setActiveConvId] = useState<string | undefined>(conversationId);
 
   useEffect(() => {
     if (agents.length > 0 && !selectedAgentId) {
@@ -76,12 +74,30 @@ export function ChatView({ conversationId }: ChatViewProps) {
     }
   }, [agents, selectedAgentId]);
 
+  const handleToolCall = useCallback(
+    (name: string, _metadata: Record<string, unknown>) => {
+      if (name.startsWith("canvas.") && activeConvId) {
+        loadFromServer(activeConvId);
+      }
+    },
+    [activeConvId, loadFromServer],
+  );
+
+  const handleStreamEnd = useCallback(() => {
+    if (activeConvId) {
+      loadFromServer(activeConvId);
+    }
+  }, [activeConvId, loadFromServer]);
+
   const { messages, isLoading, sendMessage, stopGeneration } = useChatStream({
     agentId: selectedAgentId,
-    conversationId,
+    conversationId: activeConvId,
     onConversationCreated: (id) => {
+      setActiveConvId(id);
       window.history.replaceState(null, "", `/chat/${id}`);
     },
+    onToolCall: handleToolCall,
+    onStreamEnd: handleStreamEnd,
   });
 
   useEffect(() => {
@@ -99,96 +115,122 @@ export function ChatView({ conversationId }: ChatViewProps) {
     lastCheckedRef.current = lastAssistant.id;
 
     const tickers = extractTickers(lastAssistant.content);
-    if (tickers.length > 0) {
-      pushItem({
+    if (tickers.length > 0 && activeConvId) {
+      addNodeAndSave({
         type: "chart",
-        title: `${tickers.slice(0, 3).join(", ")} Analysis`,
-        metadata: {
-          description: `Mentioned tickers: ${tickers.join(", ")}`,
+        label: `${tickers.slice(0, 3).join("、")} 扫描`,
+        data: {
+          description: `检测到: ${tickers.join("、")}`,
           tickers,
         },
       });
     }
-  }, [messages, pushItem]);
+  }, [messages, addNodeAndSave, activeConvId]);
 
   const noAgent = !agentsLoading && agents.length === 0;
+  const showCanvas = !!activeConvId;
+
+  const chatTitleRight = (
+    <div className="flex items-center gap-2">
+      {agents.length > 0 && (
+        <Select value={selectedAgentId} onValueChange={(v) => { if (v) setSelectedAgentId(v); }}>
+          <SelectTrigger className="h-6 w-[140px] border-black/[0.06] bg-black/[0.03] text-[11px] rounded-md px-2 py-0 text-foreground/70">
+            <SelectValue placeholder="选择智能体" />
+          </SelectTrigger>
+          <SelectContent className="rounded-lg bg-white/90 backdrop-blur-xl border-black/[0.08] shadow-lg">
+            {agents.map((agent) => (
+              <SelectItem key={agent.id} value={agent.id} className="text-[11px] text-foreground rounded-md">
+                <div className="flex items-center gap-1.5">
+                  <Bot className="h-3 w-3 text-scrub" />
+                  {agent.displayName || agent.name}
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+      <button
+        onClick={() => setShowCases(!showCases)}
+        className={cn(
+          "flex items-center gap-1 px-2 py-0.5 rounded-md transition-colors text-[11px]",
+          showCases ? "text-scrub bg-scrub/10" : "text-foreground/50 hover:text-foreground hover:bg-black/[0.04]"
+        )}
+      >
+        <Clock className="h-3 w-3" />
+        历史
+      </button>
+    </div>
+  );
+
+  const [splitPercent, setSplitPercent] = useState(55);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
+
+  const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    draggingRef.current = true;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!draggingRef.current || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = ev.clientX - rect.left;
+      const pct = Math.min(80, Math.max(20, (x / rect.width) * 100));
+      setSplitPercent(pct);
+    };
+
+    const onMouseUp = () => {
+      draggingRef.current = false;
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  }, []);
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex h-10 items-center justify-between border-b border-border/40 px-4">
-        <div className="flex items-center gap-3">
-          {agents.length > 0 && (
-            <AgentSelect
-              agents={agents}
-              value={selectedAgentId}
-              onChange={setSelectedAgentId}
-            />
-          )}
-          {selectedAgentId && (
-            <div className="flex items-center gap-1.5 font-mono text-xs text-pa-green">
-              <div className="h-1.5 w-1.5 rounded-full bg-pa-green animate-pulse" />
-              READY
+    <div ref={containerRef} className="flex h-full gap-0 p-3 pt-1">
+
+      {/* 左侧：对话窗口 */}
+      <MacWindow
+        title="分析面板"
+        titleRight={chatTitleRight}
+        className={showCanvas ? "min-w-0 shrink-0" : "flex-1 min-w-0 max-w-4xl mx-auto"}
+        style={showCanvas ? { width: `calc(${splitPercent}% - 6px)` } : undefined}
+      >
+        <div className="flex flex-col h-full">
+          {showCases && conversations.length > 0 && (
+            <div className="border-b border-black/[0.04] bg-black/[0.015] max-h-28 overflow-y-auto">
+              {conversations.slice(0, 10).map((c) => (
+                <a
+                  key={c.id}
+                  href={`/chat/${c.id}`}
+                  className="flex items-center gap-2 px-4 py-1.5 text-[11px] text-foreground/50 hover:text-foreground hover:bg-black/[0.02] transition-colors"
+                >
+                  <span className="opacity-60">{timeAgo(c.updatedAt)}</span>
+                  <span className="truncate">{c.title}</span>
+                </a>
+              ))}
             </div>
           )}
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={togglePanel}
-          className={cn(
-            "h-8 gap-1.5 px-2.5 font-mono text-xs uppercase tracking-wider",
-            viewportOpen
-              ? "text-pa-amber"
-              : "text-muted-foreground hover:text-foreground"
-          )}
-        >
-          {viewportOpen ? (
-            <PanelRightClose className="h-3.5 w-3.5" />
-          ) : (
-            <PanelRightOpen className="h-3.5 w-3.5" />
-          )}
-          Viewport
-        </Button>
-      </div>
 
-      <div className="flex flex-1 overflow-hidden">
-        <div
-          className={cn(
-            "flex min-w-0 flex-col",
-            viewportOpen ? "w-[55%]" : "flex-1"
-          )}
-        >
-          <ScrollArea className="flex-1" ref={scrollRef}>
+          <div className="flex-1 overflow-y-auto" ref={scrollRef}>
             {messages.length === 0 ? (
-              <WelcomeDashboard
-                onSendPrompt={sendMessage}
-                disabled={!selectedAgentId || noAgent}
-              />
+              <WelcomeDashboard onSendPrompt={sendMessage} disabled={!selectedAgentId || noAgent} />
             ) : (
-              <div
-                className={cn(
-                  "py-4",
-                  viewportOpen ? "px-2" : "mx-auto max-w-3xl"
-                )}
-              >
+              <div>
                 {messages.map((msg) => (
-                  <ChatMessage
-                    key={msg.id}
-                    role={msg.role}
-                    content={msg.content}
-                    isStreaming={msg.isStreaming}
-                  />
+                  <ChatMessage key={msg.id} role={msg.role} content={msg.content} isStreaming={msg.isStreaming} />
                 ))}
               </div>
             )}
-          </ScrollArea>
+          </div>
 
-          <div
-            className={cn(
-              "border-t border-border/40 p-4",
-              !viewportOpen && "mx-auto w-full max-w-3xl"
-            )}
-          >
+          <div className="p-3 pt-0">
             <ChatInput
               onSend={sendMessage}
               onStop={stopGeneration}
@@ -197,13 +239,100 @@ export function ChatView({ conversationId }: ChatViewProps) {
             />
           </div>
         </div>
+      </MacWindow>
 
-        {viewportOpen && (
-          <div className="w-[45%] border-l border-border/40">
-            <ViewportPanel />
+      {/* 可拖拽的分割条 */}
+      {showCanvas && (
+        <div
+          onMouseDown={handleDividerMouseDown}
+          className="w-3 shrink-0 flex items-center justify-center cursor-col-resize group z-10"
+        >
+          <div className="w-[3px] h-10 rounded-full bg-black/[0.08] group-hover:bg-scrub/40 group-active:bg-scrub/60 transition-colors" />
+        </div>
+      )}
+
+      {/* 右侧：无限画布 */}
+      {showCanvas && (
+        <MacWindow
+          title="分析画布"
+          titleRight={<CanvasToolbar />}
+          className="hidden min-w-0 lg:flex"
+          style={{ width: `calc(${100 - splitPercent}% - 6px)` }}
+          variant="subtle"
+        >
+          <InfiniteCanvas conversationId={activeConvId!} />
+        </MacWindow>
+      )}
+    </div>
+  );
+}
+
+const addItems: { type: CanvasNodeType; icon: typeof Plus; label: string }[] = [
+  { type: "chart", icon: HeartPulse, label: "股票图表" },
+  { type: "image", icon: ImageIcon, label: "图片" },
+  { type: "pdf", icon: FileText, label: "PDF" },
+  { type: "text", icon: Type, label: "文本" },
+];
+
+function CanvasToolbar() {
+  const addNode = useCanvasStore((s) => s.addNode);
+  const [open, setOpen] = useState(false);
+
+  const handleAdd = useCallback(
+    (type: CanvasNodeType) => {
+      const defaults: Record<CanvasNodeType, { label: string; data: Record<string, unknown> }> = {
+        chart: { label: "股票图表", data: { tickers: [] } },
+        image: { label: "图片", data: {} },
+        pdf: { label: "PDF 文件", data: {} },
+        text: { label: "文本笔记", data: { content: "" } },
+      };
+      const d = defaults[type];
+      const currentNodes = useCanvasStore.getState().nodes;
+      const maxY = currentNodes.length > 0
+        ? Math.max(...currentNodes.map((n) => n.position.y + (((n.data as Record<string, unknown>).height as number) ?? 240)))
+        : 0;
+      const w = 340;
+      const h = type === "text" ? 180 : 280;
+      addNode({
+        id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type: "canvasCard",
+        dragHandle: ".drag-handle",
+        position: { x: (currentNodes.length % 2) * 360 + 20, y: maxY + 30 },
+        data: { label: d.label, nodeType: type, width: w, height: h, ...d.data },
+        style: { width: w, height: h },
+      });
+      setOpen(false);
+    },
+    [addNode],
+  );
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] text-foreground/50 hover:text-foreground hover:bg-black/[0.04] transition-colors"
+      >
+        <Plus className="h-3 w-3" />
+        添加
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-1 z-50 w-36 rounded-xl bg-[#f6f5f4]/95 backdrop-blur-2xl border border-black/[0.06] shadow-lg p-1">
+            {addItems.map(({ type, icon: Icon, label }) => (
+              <button
+                key={type}
+                onClick={() => handleAdd(type)}
+                className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg text-xs text-foreground/70 hover:text-foreground hover:bg-black/[0.04] transition-colors"
+              >
+                <Icon className="h-3.5 w-3.5 text-scrub" />
+                {label}
+              </button>
+            ))}
           </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }

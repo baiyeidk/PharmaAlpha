@@ -22,10 +22,18 @@ export function executeAgent(
 
   return new ReadableStream<AgentOutputChunk>({
     start(controller) {
+      const port = process.env.PORT || "3000";
+      const apiKey = process.env.AGENT_API_KEY || "pharma-agent-internal-key";
+
       const proc = spawn(pythonPath, ["-u", agentPath], {
         stdio: ["pipe", "pipe", "pipe"],
         cwd: AGENTS_DIR,
-        env: { ...process.env, PYTHONPATH: AGENTS_DIR },
+        env: {
+          ...process.env,
+          PYTHONPATH: AGENTS_DIR,
+          CANVAS_API_BASE: `http://localhost:${port}/api/canvas`,
+          CANVAS_API_KEY: apiKey,
+        },
       });
 
       const timer = setTimeout(() => {

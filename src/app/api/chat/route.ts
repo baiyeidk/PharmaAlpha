@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { executeAgent, sseEncoder, sseHeaders, getAgentById } from "@/lib/agents";
 import type { AgentOutputChunk } from "@/lib/agents";
+import { executeCanvasTool } from "@/lib/agents/canvas-tools";
+import { getCanvasSystemMessage, getCanvasToolsForLLM } from "@/lib/agents/tool-definitions";
 
 export async function POST(req: Request) {
   const session = await getSession();
@@ -48,22 +50,59 @@ export async function POST(req: Request) {
     });
   }
 
+  const toolSystemMsg = {
+    role: "system",
+    content: getCanvasSystemMessage(),
+  };
+  const messagesWithTools = [toolSystemMsg, ...messages];
+
   const agentStream = executeAgent(agent.entryPoint, {
     action: "chat",
-    messages,
+    messages: messagesWithTools,
     session_id: convId,
+    tools: getCanvasToolsForLLM(),
   });
 
   const chunks: string[] = [];
+  const toolCallPattern = /\{"type"\s*:\s*"tool_call"\s*,\s*"name"\s*:\s*"(canvas\.[^"]+)"\s*,\s*"args"\s*:\s*(\{[^}]*\})\s*\}/g;
+
+  async function handleToolCall(tc: AgentOutputChunk): Promise<AgentOutputChunk> {
+    const result = await executeCanvasTool(tc, convId);
+    return { ...result, metadata: { ...result.metadata, conversationId: convId } };
+  }
 
   const captureAndForward = new TransformStream<AgentOutputChunk, AgentOutputChunk>({
-    transform(chunk, controller) {
-      if (chunk.type === "chunk" && chunk.content) {
-        chunks.push(chunk.content);
-      } else if (chunk.type === "result" && chunk.content) {
-        chunks.push(chunk.content);
+    async transform(chunk, controller) {
+      if (chunk.type === "tool_call" && chunk.name?.startsWith("canvas.")) {
+        controller.enqueue(await handleToolCall(chunk));
+        return;
       }
-      controller.enqueue({ ...chunk, metadata: { ...chunk.metadata, conversationId: convId } });
+
+      if ((chunk.type === "chunk" || chunk.type === "result") && chunk.content) {
+        const text = chunk.content;
+        const matches = [...text.matchAll(toolCallPattern)];
+
+        if (matches.length > 0) {
+          let cleanText = text;
+          for (const match of matches) {
+            cleanText = cleanText.replace(match[0], "");
+            try {
+              const parsed = JSON.parse(match[0]) as AgentOutputChunk;
+              controller.enqueue(await handleToolCall(parsed));
+            } catch { /* skip malformed */ }
+          }
+          const trimmed = cleanText.trim();
+          if (trimmed) {
+            chunks.push(trimmed);
+            controller.enqueue({ ...chunk, content: trimmed, metadata: { ...chunk.metadata, conversationId: convId } });
+          }
+        } else {
+          chunks.push(text);
+          controller.enqueue({ ...chunk, metadata: { ...chunk.metadata, conversationId: convId } });
+        }
+      } else {
+        controller.enqueue({ ...chunk, metadata: { ...chunk.metadata, conversationId: convId } });
+      }
     },
     async flush() {
       const fullContent = chunks.join("");

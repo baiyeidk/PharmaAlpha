@@ -2,8 +2,6 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Send, Square } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -18,14 +16,14 @@ export function ChatInput({
   onStop,
   isLoading = false,
   disabled = false,
-  placeholder = "Type your message...",
+  placeholder = "输入您想分析的公司或问题…",
 }: ChatInputProps) {
   const [input, setInput] = useState("");
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!isLoading) {
-      textareaRef.current?.focus();
+      inputRef.current?.focus();
     }
   }, [isLoading]);
 
@@ -36,41 +34,39 @@ export function ChatInput({
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter") {
       e.preventDefault();
       handleSubmit();
     }
   }
 
   return (
-    <div className="flex items-end gap-2">
-      <Textarea
-        ref={textareaRef}
+    <div className="flex items-center h-10 rounded-xl bg-black/[0.03] border border-black/[0.06] px-1">
+      <input
+        ref={inputRef}
+        type="text"
         value={input}
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
         disabled={disabled}
-        rows={1}
-        className="min-h-[48px] max-h-[200px] resize-none bg-card/50 border-border/40 text-base placeholder:text-muted-foreground/70 focus-visible:border-pa-cyan/40 focus-visible:ring-pa-cyan/10"
+        className="flex-1 h-full bg-transparent px-3 text-sm text-foreground placeholder:text-foreground/30 focus:outline-none disabled:opacity-40"
       />
       {isLoading ? (
-        <Button
-          size="icon"
+        <button
           onClick={onStop}
-          className="shrink-0 bg-pa-red/80 text-foreground hover:bg-pa-red"
+          className="flex h-7 w-7 items-center justify-center rounded-lg text-vitals-red hover:bg-vitals-red/10 transition-colors shrink-0"
         >
-          <Square className="h-4 w-4" />
-        </Button>
+          <Square className="h-3.5 w-3.5" />
+        </button>
       ) : (
-        <Button
-          size="icon"
+        <button
           onClick={handleSubmit}
           disabled={!input.trim() || disabled}
-          className="shrink-0 bg-pa-cyan text-background hover:bg-pa-cyan/90 disabled:opacity-20"
+          className="flex h-7 w-7 items-center justify-center rounded-lg bg-scrub text-white hover:bg-scrub/90 transition-colors disabled:opacity-20 shrink-0"
         >
-          <Send className="h-4 w-4" />
-        </Button>
+          <Send className="h-3.5 w-3.5" />
+        </button>
       )}
     </div>
   );

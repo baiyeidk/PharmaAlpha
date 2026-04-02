@@ -1,96 +1,76 @@
 "use client";
 
 import {
-  FlaskConical,
-  TrendingUp,
+  Syringe,
+  Crosshair,
   CalendarClock,
-  BarChart3,
+  FlaskConical,
+  Stethoscope,
+  Pill,
+  FileText,
+  TrendingUp,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { CompanyVitalsCard, type CompanyVitals } from "@/components/ui/company-vitals-card";
 
-const indices = [
+const patients: CompanyVitals[] = [
   {
-    name: "S&P Pharma",
-    ticker: "XPH",
-    value: "2,847.32",
-    change: "+1.24%",
-    up: true,
-    spark: "0,32 8,30 16,35 24,28 32,25 40,27 48,22 56,20 64,23 72,18 80,16 88,14 100,12",
+    ticker: "600276", name: "恒瑞医药", price: "¥48.32", priceChange: "+3.2%", priceUp: true,
+    revenue: "+18%", revenueStatus: "growing", pe: "42.5x", peStatus: "elevated",
+    pipeline: "12 期III", pipelineStatus: "strong", cashflow: "+¥28亿", cashflowStatus: "positive",
+    sentiment: "99.1°", sentimentStatus: "fever", overallCondition: "healthy", stockCode: "sh600276",
   },
   {
-    name: "NBI Biotech",
-    ticker: "NBI",
-    value: "4,128.91",
-    change: "-0.38%",
-    up: false,
-    spark: "0,18 8,20 16,17 24,22 32,25 40,28 48,24 56,26 64,30 72,28 80,32 88,30 100,33",
+    ticker: "603259", name: "药明康德", price: "¥62.15", priceChange: "-1.8%", priceUp: false,
+    revenue: "-8%", revenueStatus: "declining", pe: "25.3x", peStatus: "healthy",
+    pipeline: "CRO龙头", pipelineStatus: "strong", cashflow: "+¥15亿", cashflowStatus: "positive",
+    sentiment: "96.4°", sentimentStatus: "cold", overallCondition: "irregular", stockCode: "sh603259",
   },
   {
-    name: "Health Care",
-    ticker: "XLV",
-    value: "89.42",
-    change: "+0.82%",
-    up: true,
-    spark: "0,30 8,32 16,28 24,30 32,26 40,24 48,22 56,25 64,20 72,18 80,20 88,16 100,15",
+    ticker: "300760", name: "迈瑞医疗", price: "¥285.60", priceChange: "+1.8%", priceUp: true,
+    revenue: "+20%", revenueStatus: "growing", pe: "35.8x", peStatus: "elevated",
+    pipeline: "器械龙头", pipelineStatus: "strong", cashflow: "+¥42亿", cashflowStatus: "positive",
+    sentiment: "98.6°", sentimentStatus: "warm", overallCondition: "healthy", stockCode: "sz300760",
   },
   {
-    name: "iShares Bio",
-    ticker: "IBB",
-    value: "132.67",
-    change: "+0.45%",
-    up: true,
-    spark: "0,28 8,26 16,30 24,24 32,28 40,22 48,26 56,20 64,22 72,18 80,20 88,17 100,16",
+    ticker: "688235", name: "百济神州", price: "¥142.30", priceChange: "-4.1%", priceUp: false,
+    revenue: "-15%", revenueStatus: "declining", pe: "亏损", peStatus: "critical",
+    pipeline: "6 期III", pipelineStatus: "moderate", cashflow: "-¥8亿", cashflowStatus: "negative",
+    sentiment: "102.8°", sentimentStatus: "fever", overallCondition: "critical", stockCode: "sh688235",
   },
 ];
 
-const prompts = [
+const procedures = [
   {
-    icon: FlaskConical,
-    label: "Drug pipeline analysis",
-    desc: "Phase III trials & catalysts",
-    text: "Analyze the current drug pipeline for Pfizer (PFE), including all Phase III trials and upcoming regulatory catalysts for 2026.",
+    icon: Syringe, label: "管线深度解剖",
+    desc: "在研管线及临床进展",
+    text: "深度分析恒瑞医药（600276）的在研药物管线，包括所有 III 期临床试验、成功概率、2026 年即将到来的审批节点和竞争格局。",
   },
   {
-    icon: TrendingUp,
-    label: "Stock comparison",
-    desc: "Head-to-head investment thesis",
-    text: "Compare Johnson & Johnson (JNJ) vs Merck (MRK) as pharmaceutical investment opportunities. Include revenue trends, pipeline strength, and valuation metrics.",
+    icon: Crosshair, label: "企业健康对比",
+    desc: "多维度横向对比",
+    text: "横向对比药明康德（603259）和泰格医药（300347）：营收趋势、管线能力、估值水平、现金流健康度、客户集中度风险及整体投资逻辑。",
   },
   {
-    icon: CalendarClock,
-    label: "FDA calendar",
-    desc: "PDUFA dates & approvals",
-    text: "What are the key FDA PDUFA dates and approval decisions expected this quarter? List by date with potential market impact.",
+    icon: FileText, label: "财报病理分析",
+    desc: "最新财报深度拆解",
+    text: "对迈瑞医疗（300760）进行深度财报分析：最新季度收入结构、利润率趋势、研发投入效率、负债水平、现金流质量以及海外业务占比。",
   },
   {
-    icon: BarChart3,
-    label: "Sector overview",
-    desc: "Investment landscape",
-    text: "Give me a comprehensive overview of the pharmaceutical sector's current investment landscape, including top performers, risk factors, and emerging trends.",
+    icon: CalendarClock, label: "审批日历前瞻",
+    desc: "NMPA/CDE 审批追踪",
+    text: "本季度有哪些重要的 NMPA 审批节点和新药上市申请？包括潜在的收入影响、竞争格局分析和概率加权评估。",
+  },
+  {
+    icon: FlaskConical, label: "行业全景解剖",
+    desc: "宏观趋势报告",
+    text: "给出中国医药行业全景分析：板块涨跌龙虎榜、集采政策影响、创新药出海进展、并购动态、资金流向及政策风向。",
+  },
+  {
+    icon: Pill, label: "风险评估处方",
+    desc: "投资风险多维评估",
+    text: "评估百济神州（688235）的核心投资风险：收入集中度、管线依赖性、竞争威胁、现金消耗速度，并提供风险调整后的投资建议。",
   },
 ];
-
-const headlines = [
-  { title: "Eli Lilly GLP-1 agonist revenue exceeds estimates by 23%", time: "2h", up: true },
-  { title: "FDA grants fast-track designation to Pfizer mRNA cancer vaccine", time: "5h", up: true },
-  { title: "Merck Keytruda faces biosimilar competition earlier than expected", time: "8h", up: false },
-  { title: "AbbVie completes $8.7B acquisition, expanding oncology portfolio", time: "1d", up: true },
-];
-
-function Sparkline({ points, up }: { points: string; up: boolean }) {
-  return (
-    <svg viewBox="0 0 100 40" className="h-8 w-full" fill="none" preserveAspectRatio="none">
-      <polyline
-        points={points}
-        stroke={up ? "oklch(0.42 0.16 150)" : "oklch(0.50 0.20 25)"}
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        vectorEffect="non-scaling-stroke"
-      />
-    </svg>
-  );
-}
 
 interface WelcomeDashboardProps {
   onSendPrompt: (text: string) => void;
@@ -99,107 +79,61 @@ interface WelcomeDashboardProps {
 
 export function WelcomeDashboard({ onSendPrompt, disabled }: WelcomeDashboardProps) {
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      <div className="mb-8">
-        <h2 className="text-xl font-semibold text-foreground">
-          PharmaAlpha Intelligence
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Pharmaceutical investment analysis powered by AI agents.
-        </p>
-      </div>
+    <div>
+      <div className="max-w-[920px] mx-auto px-6 py-8 space-y-8">
 
-      <div className="mb-6">
-        <div className="mb-2 flex items-center gap-2">
-          <div className="h-1 w-1 rounded-full bg-pa-green animate-pulse" />
-          <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-            Market Indices
-          </span>
+        {/* 标题 */}
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-scrub/10">
+            <Stethoscope className="h-5 w-5 text-scrub" />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold text-foreground">企业健康监控中心</h1>
+            <p className="text-xs text-muted-foreground">医药行业重点企业多维度分析</p>
+          </div>
         </div>
-        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-          {indices.map((idx) => (
-            <div
-              key={idx.ticker}
-              className="rounded-lg border border-border/30 bg-card/40 p-3"
-            >
-              <div className="mb-1.5 flex items-center justify-between">
-                <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-                  {idx.name}
-                </span>
-                <span className="font-mono text-xs text-muted-foreground">
-                  {idx.ticker}
-                </span>
-              </div>
-              <div className="font-mono text-lg font-medium tabular-nums text-foreground">
-                {idx.value}
-              </div>
-              <div
-                className={cn(
-                  "font-mono text-sm tabular-nums",
-                  idx.up ? "text-pa-green" : "text-pa-red"
-                )}
-              >
-                {idx.up ? "▲" : "▽"} {idx.change}
-              </div>
-              <div className="mt-2">
-                <Sparkline points={idx.spark} up={idx.up} />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
 
-      <div className="mb-6">
-        <span className="mb-2 block font-mono text-xs uppercase tracking-wider text-muted-foreground">
-          Quick Analysis
-        </span>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {prompts.map((p) => {
-            const Icon = p.icon;
-            return (
-              <button
-                key={p.label}
-                onClick={() => onSendPrompt(p.text)}
-                disabled={disabled}
-                className="group flex items-start gap-3 rounded-lg border border-border/20 bg-card/20 p-3 text-left transition-all hover:border-pa-cyan/25 hover:bg-card/40 disabled:pointer-events-none disabled:opacity-40"
-              >
-                <Icon className="mt-0.5 h-4 w-4 shrink-0 text-pa-cyan group-hover:text-pa-cyan" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground group-hover:text-foreground">
+        {/* 企业卡片 */}
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <TrendingUp className="h-4 w-4 text-foreground" />
+            <span className="text-sm font-semibold text-foreground">重点跟踪</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {patients.map((p) => (
+              <CompanyVitalsCard key={p.ticker} data={p} />
+            ))}
+          </div>
+        </section>
+
+        {/* 快捷分析 */}
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <Pill className="h-4 w-4 text-scrub" />
+            <span className="text-sm font-semibold text-scrub">快捷分析</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2.5">
+            {procedures.map((p) => {
+              const Icon = p.icon;
+              return (
+                <button
+                  key={p.label}
+                  onClick={() => onSendPrompt(p.text)}
+                  disabled={disabled}
+                  className="group rounded-xl p-3.5 text-left transition-all bg-white/50 border border-black/[0.04] hover:bg-white/80 hover:shadow-md hover:scale-[1.01] active:scale-[0.99] disabled:pointer-events-none disabled:opacity-40"
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-scrub/8 mb-2 group-hover:bg-scrub/14 transition-colors">
+                    <Icon className="h-4 w-4 text-scrub" />
+                  </div>
+                  <span className="text-sm font-medium text-foreground group-hover:text-scrub transition-colors block">
                     {p.label}
-                  </p>
-                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                    {p.desc}
-                  </p>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div>
-        <span className="mb-2 block font-mono text-xs uppercase tracking-wider text-muted-foreground">
-          Market Pulse
-        </span>
-        <div className="rounded-lg border border-border/20 bg-card/20 divide-y divide-border/15">
-          {headlines.map((h, i) => (
-            <div key={i} className="flex items-center gap-2.5 px-3 py-2.5">
-              <div
-                className={cn(
-                  "h-1.5 w-1.5 shrink-0 rounded-full",
-                  h.up ? "bg-pa-green/50" : "bg-pa-red/50"
-                )}
-              />
-              <p className="min-w-0 flex-1 truncate text-sm text-foreground/80">
-                {h.title}
-              </p>
-              <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                {h.time}
-              </span>
-            </div>
-          ))}
-        </div>
+                  </span>
+                  <span className="text-[11px] text-muted-foreground mt-0.5 block">{p.desc}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
       </div>
     </div>
   );
