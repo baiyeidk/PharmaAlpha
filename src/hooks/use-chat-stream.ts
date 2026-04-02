@@ -13,12 +13,16 @@ interface UseChatStreamOptions {
   agentId: string;
   conversationId?: string;
   onConversationCreated?: (id: string) => void;
+  onToolCall?: (name: string, metadata: Record<string, unknown>) => void;
+  onStreamEnd?: () => void;
 }
 
 export function useChatStream({
   agentId,
   conversationId,
   onConversationCreated,
+  onToolCall,
+  onStreamEnd,
 }: UseChatStreamOptions) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -118,7 +122,20 @@ export function useChatStream({
                 onConversationCreated(chunk.metadata.conversationId);
               }
 
-              if (chunk.type === "chunk" || chunk.type === "result") {
+              if (chunk.type === "tool_call") {
+                if (chunk.metadata?.tool && onToolCall) {
+                  onToolCall(chunk.name || chunk.metadata.tool as string, chunk.metadata);
+                }
+                if (chunk.content) {
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === assistantMessage.id
+                        ? { ...m, content: m.content + chunk.content }
+                        : m
+                    )
+                  );
+                }
+              } else if (chunk.type === "chunk" || chunk.type === "result") {
                 setMessages((prev) =>
                   prev.map((m) =>
                     m.id === assistantMessage.id
@@ -158,9 +175,10 @@ export function useChatStream({
         );
         setIsLoading(false);
         abortRef.current = null;
+        onStreamEnd?.();
       }
     },
-    [agentId, conversationId, messages, isLoading, onConversationCreated]
+    [agentId, conversationId, messages, isLoading, onConversationCreated, onToolCall, onStreamEnd]
   );
 
   const stopGeneration = useCallback(() => {

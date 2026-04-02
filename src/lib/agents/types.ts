@@ -1,3 +1,9 @@
+export interface ToolSchema {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
+
 export interface AgentInput {
   action: string;
   session_id?: string;
@@ -7,6 +13,7 @@ export interface AgentInput {
     metadata?: Record<string, unknown>;
   }>;
   params?: Record<string, unknown>;
+  tools?: ToolSchema[];
 }
 
 export interface AgentOutputChunk {

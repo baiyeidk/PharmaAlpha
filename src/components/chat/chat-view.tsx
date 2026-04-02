@@ -61,6 +61,7 @@ export function ChatView({ conversationId }: ChatViewProps) {
   const { agents, loading: agentsLoading } = useAgents();
   const [selectedAgentId, setSelectedAgentId] = useState<string>("");
   const addNodeAndSave = useCanvasStore((s) => s.addNodeAndSave);
+  const loadFromServer = useCanvasStore((s) => s.loadFromServer);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastCheckedRef = useRef<string>("");
   const { conversations } = useConversations();
@@ -73,6 +74,21 @@ export function ChatView({ conversationId }: ChatViewProps) {
     }
   }, [agents, selectedAgentId]);
 
+  const handleToolCall = useCallback(
+    (name: string, _metadata: Record<string, unknown>) => {
+      if (name.startsWith("canvas.") && activeConvId) {
+        loadFromServer(activeConvId);
+      }
+    },
+    [activeConvId, loadFromServer],
+  );
+
+  const handleStreamEnd = useCallback(() => {
+    if (activeConvId) {
+      loadFromServer(activeConvId);
+    }
+  }, [activeConvId, loadFromServer]);
+
   const { messages, isLoading, sendMessage, stopGeneration } = useChatStream({
     agentId: selectedAgentId,
     conversationId: activeConvId,
@@ -80,6 +96,8 @@ export function ChatView({ conversationId }: ChatViewProps) {
       setActiveConvId(id);
       window.history.replaceState(null, "", `/chat/${id}`);
     },
+    onToolCall: handleToolCall,
+    onStreamEnd: handleStreamEnd,
   });
 
   useEffect(() => {

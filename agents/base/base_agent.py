@@ -19,7 +19,7 @@ import traceback
 from abc import ABC, abstractmethod
 from typing import Generator, Any
 
-from .protocol import AgentRequest, AgentChunk, AgentResult, AgentError
+from .protocol import AgentRequest, AgentChunk, AgentToolCall, AgentResult, AgentError
 
 
 class BaseAgent(ABC):
@@ -58,7 +58,7 @@ class BaseAgent(ABC):
     @abstractmethod
     def execute(
         self, request: AgentRequest
-    ) -> Generator[AgentChunk | AgentResult | AgentError, None, None]:
+    ) -> Generator[AgentChunk | AgentToolCall | AgentResult | AgentError, None, None]:
         """
         Process the request and yield output chunks.
         Must yield at least one AgentResult at the end.
