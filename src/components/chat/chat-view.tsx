@@ -1,15 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Bot, Clock } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Bot, Clock, HeartPulse, ImageIcon, FileText, Type, Plus } from "lucide-react";
 import { ChatMessage } from "./chat-message";
 import { ChatInput } from "./chat-input";
-import { ViewportPanel } from "./viewport-panel";
 import { WelcomeDashboard } from "./welcome-dashboard";
 import { MacWindow } from "@/components/ui/mac-window";
+import dynamic from "next/dynamic";
+
+const InfiniteCanvas = dynamic(
+  () => import("@/components/canvas/infinite-canvas").then((m) => m.InfiniteCanvas),
+  { ssr: false, loading: () => <div className="flex-1 flex items-center justify-center"><div className="h-5 w-5 rounded-full border-2 border-foreground/20 border-t-foreground/60 animate-spin" /></div> },
+);
 import { useChatStream } from "@/hooks/use-chat-stream";
 import { useAgents } from "@/hooks/use-agents";
-import { useViewportStore } from "@/stores/viewport-store";
+import { useCanvasStore } from "@/stores/canvas-store";
+import type { CanvasNodeType } from "@/stores/canvas-store";
 import {
   Select,
   SelectContent,
@@ -54,11 +60,12 @@ interface ChatViewProps {
 export function ChatView({ conversationId }: ChatViewProps) {
   const { agents, loading: agentsLoading } = useAgents();
   const [selectedAgentId, setSelectedAgentId] = useState<string>("");
-  const { pushItem } = useViewportStore();
+  const addNodeAndSave = useCanvasStore((s) => s.addNodeAndSave);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastCheckedRef = useRef<string>("");
   const { conversations } = useConversations();
   const [showCases, setShowCases] = useState(false);
+  const [activeConvId, setActiveConvId] = useState<string | undefined>(conversationId);
 
   useEffect(() => {
     if (agents.length > 0 && !selectedAgentId) {
@@ -68,8 +75,9 @@ export function ChatView({ conversationId }: ChatViewProps) {
 
   const { messages, isLoading, sendMessage, stopGeneration } = useChatStream({
     agentId: selectedAgentId,
-    conversationId,
+    conversationId: activeConvId,
     onConversationCreated: (id) => {
+      setActiveConvId(id);
       window.history.replaceState(null, "", `/chat/${id}`);
     },
   });
@@ -89,16 +97,20 @@ export function ChatView({ conversationId }: ChatViewProps) {
     lastCheckedRef.current = lastAssistant.id;
 
     const tickers = extractTickers(lastAssistant.content);
-    if (tickers.length > 0) {
-      pushItem({
+    if (tickers.length > 0 && activeConvId) {
+      addNodeAndSave({
         type: "chart",
-        title: `${tickers.slice(0, 3).join("、")} 扫描`,
-        metadata: { description: `检测到: ${tickers.join("、")}`, tickers },
+        label: `${tickers.slice(0, 3).join("、")} 扫描`,
+        data: {
+          description: `检测到: ${tickers.join("、")}`,
+          tickers,
+        },
       });
     }
-  }, [messages, pushItem]);
+  }, [messages, addNodeAndSave, activeConvId]);
 
   const noAgent = !agentsLoading && agents.length === 0;
+  const showCanvas = !!activeConvId;
 
   const chatTitleRight = (
     <div className="flex items-center gap-2">
@@ -132,17 +144,47 @@ export function ChatView({ conversationId }: ChatViewProps) {
     </div>
   );
 
+  const [splitPercent, setSplitPercent] = useState(55);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
+
+  const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    draggingRef.current = true;
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!draggingRef.current || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = ev.clientX - rect.left;
+      const pct = Math.min(80, Math.max(20, (x / rect.width) * 100));
+      setSplitPercent(pct);
+    };
+
+    const onMouseUp = () => {
+      draggingRef.current = false;
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  }, []);
+
   return (
-    <div className="flex h-full gap-3 p-3 pt-1">
+    <div ref={containerRef} className="flex h-full gap-0 p-3 pt-1">
 
       {/* 左侧：对话窗口 */}
       <MacWindow
         title="分析面板"
         titleRight={chatTitleRight}
-        className="flex-1 min-w-0"
+        className={showCanvas ? "min-w-0 shrink-0" : "flex-1 min-w-0 max-w-4xl mx-auto"}
+        style={showCanvas ? { width: `calc(${splitPercent}% - 6px)` } : undefined}
       >
         <div className="flex flex-col h-full">
-          {/* 历史记录 */}
           {showCases && conversations.length > 0 && (
             <div className="border-b border-black/[0.04] bg-black/[0.015] max-h-28 overflow-y-auto">
               {conversations.slice(0, 10).map((c) => (
@@ -158,7 +200,6 @@ export function ChatView({ conversationId }: ChatViewProps) {
             </div>
           )}
 
-          {/* 对话内容 */}
           <div className="flex-1 overflow-y-auto" ref={scrollRef}>
             {messages.length === 0 ? (
               <WelcomeDashboard onSendPrompt={sendMessage} disabled={!selectedAgentId || noAgent} />
@@ -171,7 +212,6 @@ export function ChatView({ conversationId }: ChatViewProps) {
             )}
           </div>
 
-          {/* 输入栏 */}
           <div className="p-3 pt-0">
             <ChatInput
               onSend={sendMessage}
@@ -183,14 +223,98 @@ export function ChatView({ conversationId }: ChatViewProps) {
         </div>
       </MacWindow>
 
-      {/* 右侧：诊断视窗 */}
-      <MacWindow
-        title="诊断视窗"
-        className="hidden w-[40%] shrink-0 lg:flex"
-        variant="subtle"
+      {/* 可拖拽的分割条 */}
+      {showCanvas && (
+        <div
+          onMouseDown={handleDividerMouseDown}
+          className="w-3 shrink-0 flex items-center justify-center cursor-col-resize group z-10"
+        >
+          <div className="w-[3px] h-10 rounded-full bg-black/[0.08] group-hover:bg-scrub/40 group-active:bg-scrub/60 transition-colors" />
+        </div>
+      )}
+
+      {/* 右侧：无限画布 */}
+      {showCanvas && (
+        <MacWindow
+          title="分析画布"
+          titleRight={<CanvasToolbar />}
+          className="hidden min-w-0 lg:flex"
+          style={{ width: `calc(${100 - splitPercent}% - 6px)` }}
+          variant="subtle"
+        >
+          <InfiniteCanvas conversationId={activeConvId!} />
+        </MacWindow>
+      )}
+    </div>
+  );
+}
+
+const addItems: { type: CanvasNodeType; icon: typeof Plus; label: string }[] = [
+  { type: "chart", icon: HeartPulse, label: "股票图表" },
+  { type: "image", icon: ImageIcon, label: "图片" },
+  { type: "pdf", icon: FileText, label: "PDF" },
+  { type: "text", icon: Type, label: "文本" },
+];
+
+function CanvasToolbar() {
+  const addNode = useCanvasStore((s) => s.addNode);
+  const [open, setOpen] = useState(false);
+
+  const handleAdd = useCallback(
+    (type: CanvasNodeType) => {
+      const defaults: Record<CanvasNodeType, { label: string; data: Record<string, unknown> }> = {
+        chart: { label: "股票图表", data: { tickers: [] } },
+        image: { label: "图片", data: {} },
+        pdf: { label: "PDF 文件", data: {} },
+        text: { label: "文本笔记", data: { content: "" } },
+      };
+      const d = defaults[type];
+      const currentNodes = useCanvasStore.getState().nodes;
+      const maxY = currentNodes.length > 0
+        ? Math.max(...currentNodes.map((n) => n.position.y + (((n.data as Record<string, unknown>).height as number) ?? 240)))
+        : 0;
+      const w = 340;
+      const h = type === "text" ? 180 : 280;
+      addNode({
+        id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type: "canvasCard",
+        dragHandle: ".drag-handle",
+        position: { x: (currentNodes.length % 2) * 360 + 20, y: maxY + 30 },
+        data: { label: d.label, nodeType: type, width: w, height: h, ...d.data },
+        style: { width: w, height: h },
+      });
+      setOpen(false);
+    },
+    [addNode],
+  );
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] text-foreground/50 hover:text-foreground hover:bg-black/[0.04] transition-colors"
       >
-        <ViewportPanel />
-      </MacWindow>
+        <Plus className="h-3 w-3" />
+        添加
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-1 z-50 w-36 rounded-xl bg-[#f6f5f4]/95 backdrop-blur-2xl border border-black/[0.06] shadow-lg p-1">
+            {addItems.map(({ type, icon: Icon, label }) => (
+              <button
+                key={type}
+                onClick={() => handleAdd(type)}
+                className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg text-xs text-foreground/70 hover:text-foreground hover:bg-black/[0.04] transition-colors"
+              >
+                <Icon className="h-3.5 w-3.5 text-scrub" />
+                {label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

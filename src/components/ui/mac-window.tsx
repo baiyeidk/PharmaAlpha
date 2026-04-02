@@ -9,6 +9,7 @@ interface MacWindowProps {
   className?: string;
   contentClassName?: string;
   variant?: "default" | "subtle";
+  style?: React.CSSProperties;
 }
 
 export function MacWindow({
@@ -18,9 +19,11 @@ export function MacWindow({
   className,
   contentClassName,
   variant = "default",
+  style,
 }: MacWindowProps) {
   return (
     <div
+      style={style}
       className={cn(
         "flex flex-col rounded-2xl overflow-hidden",
         variant === "default"
@@ -52,7 +55,7 @@ export function MacWindow({
       </div>
 
       {/* Content */}
-      <div className={cn("flex-1 min-h-0 overflow-hidden", contentClassName)}>
+      <div className={cn("flex-1 min-h-0 overflow-hidden flex flex-col", contentClassName)}>
         {children}
       </div>
     </div>
