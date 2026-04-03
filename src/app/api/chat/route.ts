@@ -9,6 +9,66 @@ import { getCanvasSystemMessage, getCanvasToolsForLLM } from "@/lib/agents/tool-
 
 export const runtime = "nodejs";
 
+async function searchRAGKnowledge(query: string, userId: string, topK: number = 3) {
+  try {
+    const documents = await prisma.rAGDocument.findMany({
+      where: { userId },
+      include: {
+        chunks: true,
+      },
+    });
+
+    const allChunks = documents.flatMap(doc =>
+      doc.chunks.map(chunk => ({
+        ...chunk,
+        documentTitle: doc.title,
+        documentSource: doc.source,
+      }))
+    );
+
+    const queryLower = query.toLowerCase();
+    const scoredChunks = allChunks.map(chunk => {
+      const score = calculateRelevanceScore(queryLower, chunk.content);
+      return { ...chunk, score };
+    });
+
+    const topChunks = scoredChunks
+      .sort((a, b) => b.score - a.score)
+      .slice(0, topK)
+      .filter(chunk => chunk.score > 0)
+      .map(({ score, ...rest }) => rest);
+
+    return topChunks;
+  } catch (error) {
+    console.error("RAG search error:", error);
+    return [];
+  }
+}
+
+function calculateRelevanceScore(query: string, content: string): number {
+  const contentLower = content.toLowerCase();
+  const queryWords = query.split(/\s+/).filter(w => w.length > 2);
+
+  let score = 0;
+  let matchedWords = 0;
+
+  for (const queryWord of queryWords) {
+    if (contentLower.includes(queryWord)) {
+      matchedWords++;
+      score += 1;
+
+      const exactMatches = (contentLower.match(new RegExp(queryWord, 'g')) || []).length;
+      score += exactMatches * 0.5;
+    }
+  }
+
+  if (matchedWords > 0) {
+    score += (matchedWords / queryWords.length) * 2;
+  }
+
+  return score;
+}
+
 export async function POST(req: Request) {
   const session = await getSession();
   if (!session?.id) {
@@ -57,7 +117,24 @@ export async function POST(req: Request) {
     role: "system",
     content: getCanvasSystemMessage(),
   };
-  const messagesWithTools = [toolSystemMsg, ...messages];
+
+  const ragResults = await searchRAGKnowledge(lastUserMsg?.content || "", session.id);
+  let ragSystemMsg;
+  if (ragResults.length > 0) {
+    const ragContext = ragResults.map((result, idx) => 
+      `[文档${idx + 1}] 标题: ${result.documentTitle}\n来源: ${result.documentSource || '未知'}\n内容: ${result.content}`
+    ).join('\n\n');
+    
+    ragSystemMsg = {
+      role: "system",
+      content: `以下是相关知识库内容，请在回答时参考这些信息：\n\n${ragContext}\n\n请基于以上知识库信息回答用户问题，如果知识库中没有相关信息，请基于你的知识回答。`,
+    };
+  }
+
+  const messagesWithTools = ragSystemMsg 
+    ? [ragSystemMsg, toolSystemMsg, ...messages]
+    : [toolSystemMsg, ...messages];
+
   const employeeContext =
     agent.name === "employee_investment_team"
       ? await ensureEmployeeContext(session)
@@ -69,8 +146,11 @@ export async function POST(req: Request) {
     session_id: convId,
     tools: getCanvasToolsForLLM(),
     params: employeeContext
-      ? { employee_id: employeeContext.employeeCode }
-      : undefined,
+      ? { 
+          employee_id: employeeContext.employeeCode,
+          rag_context: ragResults.length > 0 ? ragResults : undefined
+        }
+      : { rag_context: ragResults.length > 0 ? ragResults : undefined },
   });
 
   const chunks: string[] = [];

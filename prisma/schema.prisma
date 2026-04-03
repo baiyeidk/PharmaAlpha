@@ -440,3 +440,36 @@ model WorkflowExecutionEvent {
   @@index([workflowNodeId])
   @@index([eventType])
 }
+
+// ─── RAG Models ─────────────────────────────────────────────
+
+model RAGDocument {
+  id          String   @id @default(cuid())
+  title       String
+  content     String   @db.Text
+  source      String?
+  metadata    Json?
+  userId      String
+  chunks      RAGChunk[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model RAGChunk {
+  id          String   @id @default(cuid())
+  documentId  String
+  chunkIndex  Int
+  content     String   @db.Text
+  embedding   Unsupported("vector(1536)")?
+  metadata    Json?
+
+  document    RAGDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
+
+  @@index([documentId])
+  @@index([chunkIndex])
+}
