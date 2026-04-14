@@ -25,7 +25,7 @@ export function MacWindow({
     <div
       style={style}
       className={cn(
-        "flex flex-col rounded-2xl overflow-hidden",
+        "flex flex-col rounded-2xl overflow-clip",
         variant === "default"
           ? "bg-[#f6f5f4]/80 backdrop-blur-2xl shadow-[0_1px_4px_rgba(0,0,0,0.04),0_8px_32px_rgba(0,0,0,0.06)] border border-black/[0.05]"
           : "bg-[#f6f5f4]/60 backdrop-blur-xl shadow-[0_1px_3px_rgba(0,0,0,0.03),0_4px_16px_rgba(0,0,0,0.04)] border border-black/[0.04]",

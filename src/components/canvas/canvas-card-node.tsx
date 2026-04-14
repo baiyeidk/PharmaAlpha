@@ -12,11 +12,15 @@ import {
   Search,
   Upload,
   Loader2,
+  Pencil,
+  Eye,
 } from "lucide-react";
 import { StockChart } from "@/components/ui/stock-chart";
 import { ECGCanvas } from "@/components/ui/ecg-canvas";
+import { MarkdownRenderer } from "@/components/chat/markdown-renderer";
 import { useStockKline } from "@/hooks/use-stock-data";
 import { useCanvasStore, type CanvasNodeData } from "@/stores/canvas-store";
+import { cn } from "@/lib/utils";
 
 const typeConfig: Record<
   string,
@@ -251,42 +255,71 @@ function PdfBody({ data, nodeId }: { data: CanvasNodeData; nodeId: string }) {
   );
 }
 
-/* ── Text: editable ── */
+/* ── Text: edit / preview with markdown ── */
 
 function TextBody({ data, nodeId }: { data: CanvasNodeData; nodeId: string }) {
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
-  const [editing, setEditing] = useState(false);
+  const [mode, setMode] = useState<"preview" | "edit">(data.content ? "preview" : "edit");
   const [text, setText] = useState(data.content || "");
 
-  const handleBlur = useCallback(() => {
-    setEditing(false);
+  const handleSave = useCallback(() => {
     if (text !== (data.content || "")) {
       updateNodeData(nodeId, { content: text });
     }
+    setMode("preview");
   }, [text, data.content, nodeId, updateNodeData]);
 
-  if (editing) {
-    return (
-      <div className="flex-1 min-h-0 p-1 nodrag nowheel">
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onBlur={handleBlur}
-          autoFocus
-          className="nodrag nowheel w-full h-full resize-none bg-transparent text-sm leading-relaxed text-foreground p-2 focus:outline-none"
-          placeholder="输入文本内容…"
-        />
-      </div>
-    );
-  }
-
   return (
-    <div
-      className="flex-1 min-h-0 overflow-y-auto p-3 text-sm leading-relaxed text-foreground whitespace-pre-wrap cursor-text nodrag"
-      onClick={() => setEditing(true)}
-    >
-      {data.content || (
-        <span className="text-foreground/25 text-xs">点击编辑文本…</span>
+    <div className="flex-1 min-h-0 flex flex-col">
+      <div className="flex items-center gap-0.5 px-2 py-1 border-b border-black/[0.04] shrink-0">
+        <button
+          onClick={() => { if (mode === "edit") handleSave(); else setMode("preview"); }}
+          className={cn(
+            "nodrag flex items-center gap-1 h-5 px-1.5 rounded text-[10px] transition-colors",
+            mode === "preview" ? "bg-black/[0.06] text-foreground/70 font-medium" : "text-foreground/40 hover:text-foreground/60",
+          )}
+        >
+          <Eye className="h-2.5 w-2.5" />
+          预览
+        </button>
+        <button
+          onClick={() => setMode("edit")}
+          className={cn(
+            "nodrag flex items-center gap-1 h-5 px-1.5 rounded text-[10px] transition-colors",
+            mode === "edit" ? "bg-black/[0.06] text-foreground/70 font-medium" : "text-foreground/40 hover:text-foreground/60",
+          )}
+        >
+          <Pencil className="h-2.5 w-2.5" />
+          编辑
+        </button>
+      </div>
+
+      {mode === "edit" ? (
+        <div className="flex-1 min-h-0 p-1 nodrag nowheel">
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onBlur={handleSave}
+            autoFocus
+            className="nodrag nowheel w-full h-full resize-none bg-transparent text-xs leading-relaxed text-foreground p-2 focus:outline-none font-mono"
+            placeholder="支持 Markdown 语法…"
+          />
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 overflow-y-auto p-3 nodrag nowheel">
+          {text ? (
+            <div className="text-sm">
+              <MarkdownRenderer content={text} />
+            </div>
+          ) : (
+            <div
+              className="flex items-center justify-center h-full cursor-pointer"
+              onClick={() => setMode("edit")}
+            >
+              <span className="text-foreground/25 text-xs">点击编辑文本…</span>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

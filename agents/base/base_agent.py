@@ -17,9 +17,14 @@ import json
 import sys
 import traceback
 from abc import ABC, abstractmethod
-from typing import Generator, Any
+from typing import Generator, Any, Union
 
-from .protocol import AgentRequest, AgentChunk, AgentToolCall, AgentResult, AgentError
+from .protocol import (
+    AgentRequest, AgentChunk, AgentToolCall, AgentResult, AgentError,
+    AgentToolStart, AgentToolResult, AgentPlan, AgentCheck,
+    AgentAgentChunk, AgentDelegate, AgentDelegateResult,
+    PhaseStart, PhaseEnd,
+)
 
 
 class BaseAgent(ABC):
@@ -56,10 +61,17 @@ class BaseAgent(ABC):
             )
             sys.stderr.write(traceback.format_exc())
 
+    AgentOutput = Union[
+        AgentChunk, AgentToolCall, AgentResult, AgentError,
+        AgentToolStart, AgentToolResult, AgentPlan, AgentCheck,
+        AgentAgentChunk, AgentDelegate, AgentDelegateResult,
+        PhaseStart, PhaseEnd,
+    ]
+
     @abstractmethod
     def execute(
         self, request: AgentRequest
-    ) -> Generator[AgentChunk | AgentToolCall | AgentResult | AgentError, None, None]:
+    ) -> Generator[AgentOutput, None, None]:
         """
         Process the request and yield output chunks.
         Must yield at least one AgentResult at the end.

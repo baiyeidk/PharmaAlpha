@@ -67,6 +67,11 @@ export function ChatView({ conversationId }: ChatViewProps) {
   const { conversations } = useConversations();
   const [showCases, setShowCases] = useState(false);
   const [activeConvId, setActiveConvId] = useState<string | undefined>(conversationId);
+  const activeConvIdRef = useRef<string | undefined>(conversationId);
+
+  useEffect(() => {
+    activeConvIdRef.current = activeConvId;
+  }, [activeConvId]);
 
   useEffect(() => {
     if (agents.length > 0 && !selectedAgentId) {
@@ -75,24 +80,27 @@ export function ChatView({ conversationId }: ChatViewProps) {
   }, [agents, selectedAgentId]);
 
   const handleToolCall = useCallback(
-    (name: string, _metadata: Record<string, unknown>) => {
-      if (name.startsWith("canvas.") && activeConvId) {
-        loadFromServer(activeConvId);
+    (name: string, metadata: Record<string, unknown>) => {
+      const convId = (metadata?.conversationId as string) || activeConvIdRef.current;
+      if (name.startsWith("canvas.") && convId) {
+        loadFromServer(convId);
       }
     },
-    [activeConvId, loadFromServer],
+    [loadFromServer],
   );
 
   const handleStreamEnd = useCallback(() => {
-    if (activeConvId) {
-      loadFromServer(activeConvId);
+    const convId = activeConvIdRef.current;
+    if (convId) {
+      loadFromServer(convId);
     }
-  }, [activeConvId, loadFromServer]);
+  }, [loadFromServer]);
 
   const { messages, isLoading, sendMessage, stopGeneration } = useChatStream({
     agentId: selectedAgentId,
     conversationId: activeConvId,
     onConversationCreated: (id) => {
+      activeConvIdRef.current = id;
       setActiveConvId(id);
       window.history.replaceState(null, "", `/chat/${id}`);
     },
@@ -224,7 +232,7 @@ export function ChatView({ conversationId }: ChatViewProps) {
             ) : (
               <div>
                 {messages.map((msg) => (
-                  <ChatMessage key={msg.id} role={msg.role} content={msg.content} isStreaming={msg.isStreaming} />
+                  <ChatMessage key={msg.id} role={msg.role} content={msg.content} isStreaming={msg.isStreaming} blocks={msg.blocks} />
                 ))}
               </div>
             )}

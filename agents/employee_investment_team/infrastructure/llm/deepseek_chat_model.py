@@ -12,16 +12,27 @@ class DeepSeekChatModel(LLMPort):
     def __init__(
         self,
         api_key: str | None = None,
-        base_url: str = "https://api.deepseek.com",
+        base_url: str | None = None,
         timeout: float | None = 8.0,
     ) -> None:
-        resolved_key = api_key or os.environ.get("DEEPSEEK_API_KEY")
+        resolved_key = (
+            api_key
+            or os.environ.get("LLM_API_KEY")
+            or os.environ.get("DEEPSEEK_API_KEY")
+        )
         if not resolved_key:
-            raise ValueError("DEEPSEEK_API_KEY is required for DeepSeekChatModel")
+            raise ValueError(
+                "LLM API key is required. Set LLM_API_KEY or DEEPSEEK_API_KEY."
+            )
+        resolved_base = (
+            base_url
+            or os.environ.get("LLM_BASE_URL")
+            or "https://api.deepseek.com"
+        )
 
         self._client = OpenAI(
             api_key=resolved_key,
-            base_url=base_url,
+            base_url=resolved_base,
             timeout=timeout,
             max_retries=0,
         )

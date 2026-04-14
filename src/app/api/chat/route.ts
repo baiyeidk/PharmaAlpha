@@ -74,45 +74,29 @@ export async function POST(req: Request) {
   });
 
   const chunks: string[] = [];
-  const toolCallPattern = /\{"type"\s*:\s*"tool_call"\s*,\s*"name"\s*:\s*"(canvas\.[^"]+)"\s*,\s*"args"\s*:\s*(\{[^}]*\})\s*\}/g;
-
-  async function handleToolCall(tc: AgentOutputChunk): Promise<AgentOutputChunk> {
-    const result = await executeCanvasTool(tc, convId);
-    return { ...result, metadata: { ...result.metadata, conversationId: convId } };
-  }
 
   const captureAndForward = new TransformStream<AgentOutputChunk, AgentOutputChunk>({
     async transform(chunk, controller) {
       if (chunk.type === "tool_call" && chunk.name?.startsWith("canvas.")) {
-        controller.enqueue(await handleToolCall(chunk));
+        const result = await executeCanvasTool(chunk, convId);
+        controller.enqueue({ ...result, metadata: { ...result.metadata, conversationId: convId } });
+        return;
+      }
+
+      const passthroughTypes = new Set([
+        "tool_start", "tool_result", "plan", "check",
+        "agent_chunk", "agent_delegate", "agent_result",
+        "phase_start", "phase_end",
+      ]);
+      if (passthroughTypes.has(chunk.type)) {
+        controller.enqueue({ ...chunk, metadata: { ...chunk.metadata, conversationId: convId } });
         return;
       }
 
       if ((chunk.type === "chunk" || chunk.type === "result") && chunk.content) {
-        const text = chunk.content;
-        const matches = [...text.matchAll(toolCallPattern)];
-
-        if (matches.length > 0) {
-          let cleanText = text;
-          for (const match of matches) {
-            cleanText = cleanText.replace(match[0], "");
-            try {
-              const parsed = JSON.parse(match[0]) as AgentOutputChunk;
-              controller.enqueue(await handleToolCall(parsed));
-            } catch { /* skip malformed */ }
-          }
-          const trimmed = cleanText.trim();
-          if (trimmed) {
-            chunks.push(trimmed);
-            controller.enqueue({ ...chunk, content: trimmed, metadata: { ...chunk.metadata, conversationId: convId } });
-          }
-        } else {
-          chunks.push(text);
-          controller.enqueue({ ...chunk, metadata: { ...chunk.metadata, conversationId: convId } });
-        }
-      } else {
-        controller.enqueue({ ...chunk, metadata: { ...chunk.metadata, conversationId: convId } });
+        chunks.push(chunk.content);
       }
+      controller.enqueue({ ...chunk, metadata: { ...chunk.metadata, conversationId: convId } });
     },
     async flush() {
       const fullContent = chunks.join("");

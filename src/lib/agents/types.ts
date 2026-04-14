@@ -17,12 +17,37 @@ export interface AgentInput {
 }
 
 export interface AgentOutputChunk {
-  type: "chunk" | "tool_call" | "result" | "error";
+  type:
+    | "chunk"
+    | "tool_call"
+    | "result"
+    | "error"
+    | "tool_start"
+    | "tool_result"
+    | "plan"
+    | "check"
+    | "agent_chunk"
+    | "agent_delegate"
+    | "agent_result"
+    | "phase_start"
+    | "phase_end";
   content?: string;
   name?: string;
   args?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   code?: string;
+  result?: string;
+  success?: boolean;
+  steps?: Array<Record<string, unknown>>;
+  reasoning?: string;
+  passed?: boolean;
+  summary?: string;
+  gaps?: string[];
+  action?: string;
+  agent_name?: string;
+  task?: string;
+  phase?: string;
+  round?: number;
 }
 
 export interface AgentMeta {

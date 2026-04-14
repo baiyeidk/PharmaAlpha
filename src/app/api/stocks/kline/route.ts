@@ -25,8 +25,15 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Missing code parameter" }, { status: 400 });
   }
 
+  let symbol = code;
+  if (/^\d{6}$/.test(code)) {
+    symbol = code.startsWith("6") || code.startsWith("9") || code.startsWith("5")
+      ? `sh${code}`
+      : `sz${code}`;
+  }
+
   const scale = SCALE_MAP[period] ?? 240;
-  const url = `https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=${code}&scale=${scale}&ma=no&datalen=${days}`;
+  const url = `https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=${symbol}&scale=${scale}&ma=no&datalen=${days}`;
 
   try {
     const res = await fetch(url, {
@@ -35,7 +42,13 @@ export async function GET(req: Request) {
 
     if (!res.ok) throw new Error(`Sina API responded with ${res.status}`);
 
-    const raw: SinaKline[] = await res.json();
+    const raw: SinaKline[] | null = await res.json();
+
+    if (!raw || !Array.isArray(raw) || raw.length === 0) {
+      return NextResponse.json([], {
+        headers: { "Cache-Control": "public, s-maxage=60" },
+      });
+    }
 
     const klines = raw.map((k, i) => {
       const close = parseFloat(k.close);

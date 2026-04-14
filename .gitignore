@@ -58,4 +58,5 @@ __pycache__/
 # local caches
 agents/**/.cache/
 agents/**/.logs/
+agents/logs/
 /计算机设计大赛/

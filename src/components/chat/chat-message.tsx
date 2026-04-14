@@ -2,14 +2,18 @@
 
 import { Syringe, FileSearch } from "lucide-react";
 import { MarkdownRenderer } from "./markdown-renderer";
+import { AgentBlock } from "./agent-block";
+import { PhaseBlock } from "./phase-block";
+import type { MessageBlock } from "@/hooks/use-chat-stream";
 
 interface ChatMessageProps {
   role: "user" | "assistant" | "system";
   content: string;
   isStreaming?: boolean;
+  blocks?: MessageBlock[];
 }
 
-export function ChatMessage({ role, content, isStreaming }: ChatMessageProps) {
+export function ChatMessage({ role, content, isStreaming, blocks }: ChatMessageProps) {
   const isUser = role === "user";
   const timestamp = new Date().toLocaleTimeString("zh-CN", {
     hour: "2-digit",
@@ -36,6 +40,8 @@ export function ChatMessage({ role, content, isStreaming }: ChatMessageProps) {
     );
   }
 
+  const hasBlocks = blocks && blocks.length > 0;
+
   return (
     <div className="border-b border-black/[0.04] bg-black/[0.015]">
       <div className="flex items-start gap-3 px-5 py-4">
@@ -50,18 +56,49 @@ export function ChatMessage({ role, content, isStreaming }: ChatMessageProps) {
               <span className="text-[10px] text-scrub animate-vitals-blink">● 分析中</span>
             )}
           </div>
-          <div className="text-sm text-foreground leading-relaxed break-words">
-            {content ? (
-              <MarkdownRenderer content={content} />
-            ) : isStreaming ? null : (
-              <span className="text-muted-foreground italic text-xs">暂无分析结果</span>
-            )}
-            {isStreaming && (
-              <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-scrub align-middle rounded-full" />
-            )}
-          </div>
+
+          {hasBlocks ? (
+            <div className="space-y-0">
+              {blocks.map((block) =>
+                block.type === "phase" ? (
+                  <PhaseBlock key={block.id} block={block} />
+                ) : block.type === "sub_agent" ? (
+                  <AgentBlock key={block.id} block={block} />
+                ) : (
+                  <SupervisorBlock key={block.id} block={block} isStreaming={isStreaming} />
+                )
+              )}
+            </div>
+          ) : (
+            <div className="text-sm text-foreground leading-relaxed break-words">
+              {content ? (
+                <MarkdownRenderer content={content} />
+              ) : isStreaming ? null : (
+                <span className="text-muted-foreground italic text-xs">暂无分析结果</span>
+              )}
+              {isStreaming && (
+                <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-scrub align-middle rounded-full" />
+              )}
+            </div>
+          )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function SupervisorBlock({ block, isStreaming }: { block: MessageBlock; isStreaming?: boolean }) {
+  if (!block.content && block.status === "streaming") return null;
+  if (!block.content) return null;
+
+  const blockStreaming = block.status === "streaming" && isStreaming;
+
+  return (
+    <div className="text-sm text-foreground leading-relaxed break-words my-1">
+      {block.content && <MarkdownRenderer content={block.content} />}
+      {blockStreaming && (
+        <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-scrub align-middle rounded-full" />
+      )}
     </div>
   );
 }

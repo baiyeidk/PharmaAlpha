@@ -1,0 +1,11 @@
+name: supervisor_agent
+display_name: 智能投资顾问
+description: PharmaAlpha 智能投资顾问 — Plan-Execute-Check 内部循环，自动规划分析步骤、执行工具调用、审查结果完整性
+entry_point: supervisor_agent/agent.py
+version: "2.0.0"
+capabilities:
+  - function_calling
+  - plan_execute_check
+  - pharma_analysis
+  - stock_analysis
+  - investment_advisory
