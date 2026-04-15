@@ -161,15 +161,14 @@ export function useChatStream({
       }
 
       try {
-        const allMessages = [...messages, userMessage].map((m) => ({
-          role: m.role,
-          content: m.content,
-        }));
-
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ agentId, messages: allMessages, conversationId }),
+          body: JSON.stringify({
+            agentId,
+            conversationId,
+            newMessage: content.trim(),
+          }),
           signal: abortRef.current.signal,
         });
 

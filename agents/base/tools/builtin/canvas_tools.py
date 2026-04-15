@@ -22,6 +22,20 @@ def set_emit_callback(cb: Callable) -> None:
     _emit_cb = cb
 
 
+def init_dedup_from_canvas(nodes: list[dict[str, Any]]) -> None:
+    """Pre-populate dedup sets from existing canvas nodes loaded from DB."""
+    _added_chart_tickers.clear()
+    _added_text_labels.clear()
+    for n in nodes:
+        node_type = n.get("type", "")
+        tickers = n.get("tickers")
+        label = n.get("label", "")
+        if node_type == "chart" and tickers and isinstance(tickers, list):
+            _added_chart_tickers.add(frozenset(tickers))
+        elif node_type == "text" and label:
+            _added_text_labels.add(label)
+
+
 def _emit_tool_call(name: str, args: dict[str, Any]) -> None:
     if _emit_cb:
         from base.protocol import AgentToolCall

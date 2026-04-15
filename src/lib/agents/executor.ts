@@ -7,6 +7,7 @@ const AGENTS_DIR = path.resolve(/* turbopackIgnore: true */ process.cwd(), "agen
 export interface ExecuteOptions {
   timeout?: number;
   pythonPath?: string;
+  extraEnv?: Record<string, string>;
 }
 
 export function executeAgent(
@@ -17,7 +18,7 @@ export function executeAgent(
   const defaultPythonPath =
     process.env.PYTHON_PATH ||
     (process.platform === "win32" ? "python" : "python3");
-  const { timeout = 600_000, pythonPath = defaultPythonPath } = options;
+  const { timeout = 600_000, pythonPath = defaultPythonPath, extraEnv = {} } = options;
 
   const agentPath = path.isAbsolute(entryPoint)
     ? entryPoint
@@ -64,6 +65,7 @@ export function executeAgent(
           PLATFORM_API_BASE: `http://localhost:${port}/api`,
           PYTHONIOENCODING: "utf-8",
           PYTHONUTF8: "1",
+          ...extraEnv,
         },
       });
 

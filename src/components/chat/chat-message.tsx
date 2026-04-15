@@ -4,6 +4,7 @@ import { Syringe, FileSearch } from "lucide-react";
 import { MarkdownRenderer } from "./markdown-renderer";
 import { AgentBlock } from "./agent-block";
 import { PhaseBlock } from "./phase-block";
+import { ToolEventBadge } from "./tool-event-badge";
 import type { MessageBlock } from "@/hooks/use-chat-stream";
 
 interface ChatMessageProps {
@@ -88,14 +89,23 @@ export function ChatMessage({ role, content, isStreaming, blocks }: ChatMessageP
 }
 
 function SupervisorBlock({ block, isStreaming }: { block: MessageBlock; isStreaming?: boolean }) {
-  if (!block.content && block.status === "streaming") return null;
-  if (!block.content) return null;
-
+  const hasTools = block.toolEvents.length > 0;
+  const hasContent = !!block.content;
   const blockStreaming = block.status === "streaming" && isStreaming;
+
+  if (!hasContent && !hasTools && block.status === "streaming") return null;
+  if (!hasContent && !hasTools) return null;
 
   return (
     <div className="text-sm text-foreground leading-relaxed break-words my-1">
-      {block.content && <MarkdownRenderer content={block.content} />}
+      {hasTools && (
+        <div className="flex flex-wrap gap-1 mb-2">
+          {block.toolEvents.map((ev) => (
+            <ToolEventBadge key={ev.id} event={ev} />
+          ))}
+        </div>
+      )}
+      {hasContent && <MarkdownRenderer content={block.content} />}
       {blockStreaming && (
         <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-scrub align-middle rounded-full" />
       )}

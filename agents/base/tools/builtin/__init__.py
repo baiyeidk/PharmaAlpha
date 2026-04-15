@@ -39,6 +39,27 @@ def register_financial_tools(registry: ToolRegistry) -> None:
     registry.register(fetch_financial_report)
 
 
+def register_memory_tools(registry: ToolRegistry) -> None:
+    from .memory_tools import memory_recall
+    registry.register(memory_recall)
+
+
+def register_rag_tools(registry: ToolRegistry) -> None:
+    from .rag_tools import rag_search, rag_ingest
+    for fn in (rag_search, rag_ingest):
+        registry.register(fn)
+
+
+def register_report_tools(registry: ToolRegistry) -> None:
+    from .report_fetcher import (
+        search_financial_reports, search_research_reports,
+        download_report_to_rag,
+    )
+    for fn in (search_financial_reports, search_research_reports,
+               download_report_to_rag):
+        registry.register(fn)
+
+
 def register_all_tools(registry: ToolRegistry) -> None:
     """Register every built-in tool."""
     register_canvas_tools(registry)
@@ -46,3 +67,6 @@ def register_all_tools(registry: ToolRegistry) -> None:
     register_pdf_tools(registry)
     register_web_tools(registry)
     register_financial_tools(registry)
+    register_memory_tools(registry)
+    register_rag_tools(registry)
+    register_report_tools(registry)
