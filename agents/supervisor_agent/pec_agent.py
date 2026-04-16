@@ -358,7 +358,10 @@ class PECAgent(BaseAgent):
                 if not steps:
                     _log("PECAgent no steps planned — direct answer mode")
                     yield PhaseStart(phase="synthesize", round=round_i)
-                    synth_ctx = self._build_ctx(build_synthesize_prompt(), chat_messages)
+                    synth_ctx = self._build_ctx(
+                        build_synthesize_prompt(), chat_messages,
+                        memory_context=memory_context,
+                    )
                     synth_ctx.inject_environment(canvas_history=self._canvas_history)
                     synth_text = yield from self._run_tool_loop(
                         build_synthesize_prompt(),
@@ -415,10 +418,13 @@ class PECAgent(BaseAgent):
             # ── SYNTHESIZE ──
             yield PhaseStart(phase="synthesize", round=round_i)
 
-            synth_ctx = self._build_ctx(build_synthesize_prompt(), chat_messages)
+            synth_ctx = self._build_ctx(
+                build_synthesize_prompt(), chat_messages,
+                memory_context=memory_context,
+            )
             synth_ctx.inject_environment(canvas_history=self._canvas_history)
             synth_ctx.inject_phase_context(
-                f"以下是收集到的所有数据，请合成分析报告：\n\n{''.join(all_execute_results)}"
+                f"以下是收集到的所有数据，请据此回复用户：\n\n{''.join(all_execute_results)}"
             )
 
             synth_text = yield from self._run_tool_loop(

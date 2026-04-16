@@ -74,14 +74,24 @@ export function useChatStream({
   const [isLoading, setIsLoading] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const loadedConvRef = useRef<string | null>(null);
+  const isLoadingRef = useRef(false);
+
+  useEffect(() => {
+    isLoadingRef.current = isLoading;
+  }, [isLoading]);
 
   useEffect(() => {
     if (!conversationId || conversationId === loadedConvRef.current) return;
+    if (isLoadingRef.current) {
+      loadedConvRef.current = conversationId;
+      return;
+    }
     loadedConvRef.current = conversationId;
 
     fetch(`/api/chat/history?conversationId=${conversationId}`)
       .then((r) => r.json())
       .then((data) => {
+        if (isLoadingRef.current) return;
         if (data.messages && Array.isArray(data.messages)) {
           setMessages(
             data.messages.map((m: { id: string; role: string; content: string }) => ({
