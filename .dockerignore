@@ -1,0 +1,11 @@
+node_modules
+.next
+.git
+.env
+agents/logs
+agents/__pycache__
+**/__pycache__
+*.pyc
+.venv
+openspec
+.cursor
