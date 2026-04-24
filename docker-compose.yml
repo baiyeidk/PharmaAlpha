@@ -1,6 +1,6 @@
 services:
   db:
-    image: registry.cn-hangzhou.aliyuncs.com/pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg16
     container_name: pharma-pg
     restart: unless-stopped
     environment:
