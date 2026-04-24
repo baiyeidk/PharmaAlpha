@@ -3,7 +3,7 @@ FROM node:20-slim AS base
 RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g; s|security.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
     sed -i 's|deb.debian.org|mirrors.aliyun.com|g; s|security.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list 2>/dev/null || true
 RUN apt-get update && apt-get install -y \
-    python3 python3-pip python3-venv openssl curl \
+    python3 python3-pip python3-venv openssl curl postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -34,4 +34,4 @@ ENV PORT=3000
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "npx prisma db push && npm start"]
+CMD ["sh", "-c", "until pg_isready -h db -U postgres; do echo 'waiting for db...'; sleep 2; done && psql \"$DATABASE_URL\" -c 'CREATE EXTENSION IF NOT EXISTS vector;' && npx prisma db push --accept-data-loss && npm start"]
