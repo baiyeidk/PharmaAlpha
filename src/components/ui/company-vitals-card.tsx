@@ -27,9 +27,9 @@ export interface CompanyVitals {
 }
 
 function conditionColor(c: CompanyVitals["overallCondition"]): string {
-  if (c === "healthy") return "oklch(0.48 0.20 25)";
-  if (c === "irregular") return "oklch(0.50 0.14 80)";
-  return "oklch(0.40 0.16 150)";
+  if (c === "healthy") return "#EF4444";
+  if (c === "irregular") return "#F59E0B";
+  return "#10B981";
 }
 
 function conditionLabel(c: CompanyVitals["overallCondition"]): string {

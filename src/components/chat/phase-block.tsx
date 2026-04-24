@@ -1,27 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import {
-  ChevronRight, ListChecks, Play, ShieldCheck,
-  Loader2, CheckCircle2, XCircle,
-} from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { ToolEventBadge } from "./tool-event-badge";
 import { MarkdownRenderer } from "./markdown-renderer";
+import { PhaseTransition } from "@/components/terminal/phase-transition";
+import { AsciiSpinner } from "@/components/terminal/ascii-spinner";
 import { getPhaseDisplayName } from "@/hooks/use-chat-stream";
 import type { MessageBlock } from "@/hooks/use-chat-stream";
 import { cn } from "@/lib/utils";
-
-const PHASE_ICONS: Record<string, typeof ListChecks> = {
-  plan: ListChecks,
-  execute: Play,
-  check: ShieldCheck,
-};
-
-const PHASE_COLORS: Record<string, string> = {
-  plan: "text-blue-600",
-  execute: "text-amber-600",
-  check: "text-violet-600",
-};
 
 interface PhaseBlockProps {
   block: MessageBlock;
@@ -40,9 +27,13 @@ export function PhaseBlock({ block }: PhaseBlockProps) {
     }
   }, [isDone, phase]);
 
-  const Icon = PHASE_ICONS[phase] || ListChecks;
-  const color = PHASE_COLORS[phase] || "text-scrub";
   const displayName = getPhaseDisplayName(phase, block.round);
+  const timestamp = new Date().toLocaleTimeString("en-US", {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 
   const hasToolEvents = block.toolEvents.length > 0;
   const hasPlanSteps = block.planSteps && block.planSteps.length > 0;
@@ -51,50 +42,57 @@ export function PhaseBlock({ block }: PhaseBlockProps) {
   const hasBody = hasToolEvents || hasPlanSteps || hasCheckResult || hasContent;
 
   return (
-    <div className="rounded-lg border border-black/[0.06] bg-white/50 overflow-hidden my-2">
+    <div className="my-2 font-mono">
+      <PhaseTransition label={displayName} />
+
       <button
         onClick={() => setCollapsed(!collapsed)}
-        className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-black/[0.02] cursor-pointer transition-colors"
+        className="flex items-center gap-2 w-full py-1 text-left cursor-pointer group"
       >
         <ChevronRight
           className={cn(
-            "h-3 w-3 text-foreground/40 transition-transform shrink-0",
+            "h-3 w-3 text-term-green-dim transition-transform shrink-0",
             !collapsed && "rotate-90"
           )}
         />
-        <Icon className={cn("h-3.5 w-3.5 shrink-0", color)} />
-        <span className={cn("text-[11px] font-semibold", color)}>{displayName}</span>
+        <span className="text-[10px] text-term-green-dim">[{timestamp}]</span>
+        <span className="text-xs text-term-amber glow-subtle">{displayName}</span>
 
         {hasToolEvents && collapsed && (
-          <span className="text-[10px] text-foreground/40">
-            {block.toolEvents.length} 个工具调用
+          <span className="text-[10px] text-term-green-dim">
+            {block.toolEvents.length} tools
           </span>
         )}
 
         <span className="ml-auto shrink-0">
-          {isStreaming && <Loader2 className="h-3 w-3 animate-spin text-foreground/40" />}
-          {isDone && !hasCheckResult && <CheckCircle2 className="h-3 w-3 text-emerald-500/70" />}
-          {hasCheckResult && block.checkResult!.passed && <CheckCircle2 className="h-3 w-3 text-emerald-500/70" />}
-          {hasCheckResult && !block.checkResult!.passed && <XCircle className="h-3 w-3 text-amber-500/70" />}
+          {isStreaming && <AsciiSpinner variant="braille" className="text-[10px]" />}
+          {isDone && !hasCheckResult && (
+            <span className="text-[10px] text-term-green">[DONE]</span>
+          )}
+          {hasCheckResult && block.checkResult!.passed && (
+            <span className="text-[10px] text-term-green">[PASS]</span>
+          )}
+          {hasCheckResult && !block.checkResult!.passed && (
+            <span className="text-[10px] text-term-amber">[RETRY]</span>
+          )}
         </span>
       </button>
 
       {!collapsed && hasBody && (
-        <div className="border-t border-black/[0.04]">
+        <div className="ml-5 border-l border-term-green/10 pl-3 space-y-1">
           {hasPlanSteps && (
-            <div className="px-3 py-2">
-              <ol className="list-decimal list-inside text-xs text-foreground/70 space-y-1">
-                {block.planSteps!.map((step, i) => (
-                  <li key={step.id as string || i}>
-                    {step.description as string || JSON.stringify(step)}
-                  </li>
-                ))}
-              </ol>
+            <div className="py-1">
+              {block.planSteps!.map((step, i) => (
+                <div key={(step.id as string) || i} className="text-xs text-foreground/80">
+                  <span className="text-term-green-dim">{i + 1}.</span>{" "}
+                  {(step.description as string) || JSON.stringify(step)}
+                </div>
+              ))}
             </div>
           )}
 
           {hasToolEvents && (
-            <div className="flex flex-wrap gap-1 px-3 py-1.5">
+            <div className="space-y-0.5 py-1">
               {block.toolEvents.map((ev) => (
                 <ToolEventBadge key={ev.id} event={ev} />
               ))}
@@ -102,23 +100,25 @@ export function PhaseBlock({ block }: PhaseBlockProps) {
           )}
 
           {hasCheckResult && (
-            <div className="px-3 py-2 text-xs">
-              <span className={block.checkResult!.passed ? "text-emerald-600" : "text-amber-600"}>
+            <div className="py-1 text-xs">
+              <span className={block.checkResult!.passed ? "text-term-green" : "text-term-amber"}>
                 {block.checkResult!.summary}
               </span>
               {block.checkResult!.gaps && block.checkResult!.gaps.length > 0 && (
-                <ul className="mt-1 list-disc list-inside text-foreground/60">
-                  {block.checkResult!.gaps.map((g, i) => <li key={i}>{g}</li>)}
-                </ul>
+                <div className="mt-1 text-term-green-dim">
+                  {block.checkResult!.gaps.map((g, i) => (
+                    <div key={i}>- {g}</div>
+                  ))}
+                </div>
               )}
             </div>
           )}
 
           {hasContent && (
-            <div className="px-3 pb-3 pt-1 text-sm text-foreground leading-relaxed">
+            <div className="py-1 text-sm text-foreground leading-relaxed">
               <MarkdownRenderer content={block.content} />
               {isStreaming && (
-                <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-scrub align-middle rounded-full" />
+                <span className="text-term-green cursor-blink">█</span>
               )}
             </div>
           )}

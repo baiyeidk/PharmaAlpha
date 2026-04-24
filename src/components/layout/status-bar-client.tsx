@@ -1,31 +1,62 @@
 "use client";
 
+import Image from "next/image";
+import { useState, useEffect } from "react";
+
 interface Props {
   email: string;
   initials: string;
 }
 
-export function StatusBarClient({ email, initials }: Props) {
+export function StatusBarClient({ email }: Props) {
+  const [time, setTime] = useState("");
+
+  useEffect(() => {
+    const update = () => {
+      setTime(
+        new Date().toLocaleTimeString("en-US", {
+          hour12: false,
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        })
+      );
+    };
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const user = email?.split("@")[0] || "operator";
+
   return (
-    <header className="flex h-9 items-center justify-between px-5 text-[12px] text-foreground/50">
-      <div className="flex items-center gap-3">
-        <span className="font-semibold text-foreground/70">PharmaAlpha</span>
-        <span className="text-foreground/20">|</span>
-        <div className="flex items-center gap-1.5">
-          <div className="h-1.5 w-1.5 rounded-full bg-[#28C840]" />
-          <span>系统正常</span>
-        </div>
-        <span className="text-foreground/20">|</span>
-        <span>
-          {new Date().toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" })}
+    <header className="flex h-8 items-center justify-between border-b border-[var(--nf-border-invisible)] bg-[var(--nf-bg-surface)] px-4 font-mono text-[10px] tracking-[0.08em]">
+      <div className="flex items-center gap-3 text-[var(--nf-text-tertiary)] uppercase">
+        <span className="flex items-center gap-2">
+          <Image
+            src="/logo.png"
+            alt="PA"
+            width={16}
+            height={16}
+            priority
+            className="h-4 w-4 rounded-[2px] object-cover"
+          />
+          <span className="nf-text-primary font-semibold">PHARMAALPHA</span>
         </span>
+        <span className="text-[var(--nf-border-visible)]">│</span>
+        <span>v1.0.0</span>
+        <span className="text-[var(--nf-border-visible)]">│</span>
+        <span className="nf-text-success">SYS_OK</span>
+        <span className="text-[var(--nf-border-visible)]">│</span>
+        <span>UPLINK · STABLE</span>
       </div>
 
-      <div className="flex items-center gap-3">
-        <span>{email}</span>
-        <div className="flex h-6 w-6 items-center justify-center rounded-md bg-scrub/10 text-[10px] font-bold text-scrub">
-          {initials}
-        </div>
+      <div className="flex items-center gap-3 text-[var(--nf-text-tertiary)] uppercase">
+        <span>{user}@pha</span>
+        <span className="text-[var(--nf-border-visible)]">│</span>
+        <span className="tabular-nums nf-text-secondary">{time}</span>
+        <span className="text-[var(--nf-border-visible)]">│</span>
+        <span>UTC</span>
       </div>
     </header>
   );

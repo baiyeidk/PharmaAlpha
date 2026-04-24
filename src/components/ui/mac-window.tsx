@@ -12,6 +12,11 @@ interface MacWindowProps {
   style?: React.CSSProperties;
 }
 
+/**
+ * Industrial terminal window chrome.
+ * Three restrained status dots (accent, accent-2, text-tertiary) replace
+ * the classic macOS traffic lights to stay inside the Nexus Dark FUI palette.
+ */
 export function MacWindow({
   title,
   titleRight,
@@ -25,37 +30,41 @@ export function MacWindow({
     <div
       style={style}
       className={cn(
-        "flex flex-col rounded-2xl overflow-clip",
+        "flex flex-col overflow-clip rounded-[6px] border",
         variant === "default"
-          ? "bg-[#f6f5f4]/80 backdrop-blur-2xl shadow-[0_1px_4px_rgba(0,0,0,0.04),0_8px_32px_rgba(0,0,0,0.06)] border border-black/[0.05]"
-          : "bg-[#f6f5f4]/60 backdrop-blur-xl shadow-[0_1px_3px_rgba(0,0,0,0.03),0_4px_16px_rgba(0,0,0,0.04)] border border-black/[0.04]",
+          ? "border-[var(--nf-border-invisible)] bg-[var(--nf-bg-surface-alpha)] shadow-[0_1px_4px_rgba(0,0,0,0.3),0_8px_32px_rgba(0,0,0,0.35)]"
+          : "border-[var(--nf-border-invisible)] bg-[rgba(14,14,16,0.6)] shadow-[0_1px_3px_rgba(0,0,0,0.2)]",
         className,
       )}
     >
-      {/* macOS title bar */}
-      <div className="flex h-10 items-center shrink-0 px-4 gap-3 border-b border-black/[0.05] bg-[#eceae8]/50">
-        {/* Traffic lights */}
-        <div className="flex items-center gap-[7px] shrink-0">
-          <div className="h-3 w-3 rounded-full bg-[#EC6A5E] border border-[#D1503F]/40" />
-          <div className="h-3 w-3 rounded-full bg-[#F4BF4F] border border-[#D49E28]/40" />
-          <div className="h-3 w-3 rounded-full bg-[#61C554] border border-[#4CA93B]/40" />
+      <div className="flex h-9 shrink-0 items-center gap-3 border-b border-[var(--nf-border-invisible)] bg-[var(--nf-bg-elevated)] px-3">
+        <div className="flex shrink-0 items-center gap-[6px]">
+          <span
+            aria-hidden
+            className="h-2 w-2 rounded-full bg-[var(--nf-accent)] shadow-[0_0_4px_rgba(255,109,31,0.55)]"
+          />
+          <span
+            aria-hidden
+            className="h-2 w-2 rounded-full bg-[var(--nf-accent2)]"
+          />
+          <span
+            aria-hidden
+            className="h-2 w-2 rounded-full bg-[var(--nf-text-disabled)]"
+          />
         </div>
 
         {title && (
-          <span className="text-[13px] font-medium text-foreground/70 truncate">
+          <span className="truncate font-mono text-[10px] tracking-[0.1em] uppercase text-[var(--nf-text-tertiary)]">
             {title}
           </span>
         )}
 
         {titleRight && (
-          <div className="ml-auto flex items-center shrink-0">
-            {titleRight}
-          </div>
+          <div className="ml-auto flex shrink-0 items-center">{titleRight}</div>
         )}
       </div>
 
-      {/* Content */}
-      <div className={cn("flex-1 min-h-0 overflow-hidden flex flex-col", contentClassName)}>
+      <div className={cn("flex min-h-0 flex-1 flex-col overflow-hidden", contentClassName)}>
         {children}
       </div>
     </div>

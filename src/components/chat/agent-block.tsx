@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight, Bot, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { MarkdownRenderer } from "./markdown-renderer";
 import { ToolEventBadge } from "./tool-event-badge";
+import { AsciiSpinner } from "@/components/terminal/ascii-spinner";
 import { getAgentDisplayName } from "@/hooks/use-chat-stream";
 import type { MessageBlock } from "@/hooks/use-chat-stream";
 import { cn } from "@/lib/utils";
@@ -20,49 +21,49 @@ export function AgentBlock({ block }: AgentBlockProps) {
   const isError = block.status === "error";
 
   return (
-    <div className="rounded-lg border border-black/[0.06] bg-white/50 overflow-hidden my-2">
-      {/* Header */}
+    <div className="my-2 font-mono">
       <button
         onClick={() => !isStreaming && setCollapsed(!collapsed)}
         className={cn(
-          "flex items-center gap-2 w-full px-3 py-2 text-left transition-colors",
-          !isStreaming && "hover:bg-black/[0.02] cursor-pointer",
+          "flex items-center gap-2 w-full py-1 text-left",
+          !isStreaming && "cursor-pointer",
           isStreaming && "cursor-default",
         )}
       >
         <ChevronRight
           className={cn(
-            "h-3 w-3 text-foreground/40 transition-transform shrink-0",
+            "h-3 w-3 text-term-green-dim transition-transform shrink-0",
             !collapsed && "rotate-90"
           )}
         />
-        <Bot className="h-3.5 w-3.5 text-scrub shrink-0" />
-        <span className="text-[11px] font-semibold text-scrub">{displayName}</span>
+        <span className="text-xs text-term-cyan glow-subtle">[{displayName}]</span>
         {block.task && (
-          <span className="text-[10px] text-foreground/40 truncate">{block.task}</span>
+          <span className="text-[10px] text-term-green-dim truncate">{block.task}</span>
         )}
         <span className="ml-auto shrink-0">
-          {isStreaming && <Loader2 className="h-3 w-3 animate-spin text-scrub/60" />}
-          {isDone && <CheckCircle2 className="h-3 w-3 text-emerald-500/70" />}
-          {isError && <AlertCircle className="h-3 w-3 text-red-500/70" />}
+          {isStreaming && <AsciiSpinner variant="braille" className="text-[10px]" />}
+          {isDone && <span className="text-[10px] text-term-green">[DONE]</span>}
+          {isError && <span className="text-[10px] text-term-red">[ERR]</span>}
         </span>
       </button>
 
-      {/* Tool events bar */}
-      {block.toolEvents.length > 0 && !collapsed && (
-        <div className="flex flex-wrap gap-1 px-3 pb-1.5">
-          {block.toolEvents.map((ev) => (
-            <ToolEventBadge key={ev.id} event={ev} />
-          ))}
-        </div>
-      )}
+      {!collapsed && (
+        <div className="ml-5 border-l border-term-green/10 pl-3">
+          {block.toolEvents.length > 0 && (
+            <div className="space-y-0.5 py-1">
+              {block.toolEvents.map((ev) => (
+                <ToolEventBadge key={ev.id} event={ev} />
+              ))}
+            </div>
+          )}
 
-      {/* Content */}
-      {!collapsed && block.content && (
-        <div className="px-3 pb-3 text-sm text-foreground leading-relaxed border-t border-black/[0.04] pt-2">
-          <MarkdownRenderer content={block.content} />
-          {isStreaming && (
-            <span className="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-scrub align-middle rounded-full" />
+          {block.content && (
+            <div className="py-1 text-sm text-foreground leading-relaxed">
+              <MarkdownRenderer content={block.content} />
+              {isStreaming && (
+                <span className="text-term-green cursor-blink">█</span>
+              )}
+            </div>
           )}
         </div>
       )}

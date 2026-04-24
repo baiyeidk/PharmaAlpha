@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   Bot,
   BriefcaseBusiness,
-  Crosshair,
   LogOut,
   MessageSquare,
   Plus,
@@ -14,36 +14,43 @@ import {
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { href: "/chat", label: "Chat", icon: MessageSquare },
-  { href: "/investment-team", label: "Investment", icon: BriefcaseBusiness },
-  { href: "/agents", label: "Agents", icon: Bot },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/chat", label: "Chat", icon: MessageSquare, code: "01" },
+  { href: "/investment-team", label: "Investment", icon: BriefcaseBusiness, code: "02" },
+  { href: "/agents", label: "Agents", icon: Bot, code: "03" },
+  { href: "/settings", label: "Settings", icon: Settings, code: "04" },
 ];
 
 export function IconRail() {
   const pathname = usePathname();
 
   return (
-    <div className="flex h-full w-[64px] flex-col items-center gap-1 px-2 py-3">
+    <aside className="flex h-full w-[60px] flex-col items-center gap-1 border-r border-[var(--nf-border-invisible)] bg-[var(--nf-bg-surface)] px-2 py-3">
       <Link
         href="/chat"
-        className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-scrub/10 transition-all hover:scale-105 hover:bg-scrub/20 active:scale-95"
+        className="group relative mb-1 flex h-10 w-10 items-center justify-center overflow-hidden rounded-[4px] border border-[var(--nf-border-invisible)] transition-[border-color,box-shadow] duration-200 hover:border-[var(--nf-border-visible)] hover:shadow-[var(--nf-glow-sm)]"
         title="PharmaAlpha"
       >
-        <Crosshair className="h-5 w-5 text-scrub" />
+        <Image
+          src="/logo.png"
+          alt="PA"
+          width={32}
+          height={32}
+          priority
+          className="h-full w-full object-cover opacity-90 transition-opacity group-hover:opacity-100"
+        />
       </Link>
 
       <Link
         href="/chat"
-        className="flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-all hover:scale-105 hover:bg-black/[0.04] hover:text-scrub active:scale-95"
+        className="flex h-9 w-9 items-center justify-center rounded-[4px] border border-[var(--nf-border-invisible)] text-[var(--nf-text-tertiary)] transition-[border-color,color,box-shadow] duration-200 hover:border-[var(--nf-accent)] hover:text-[var(--nf-accent)] hover:shadow-[var(--nf-glow-sm)]"
         title="New Analysis"
       >
-        <Plus className="h-5 w-5" />
+        <Plus className="h-4 w-4" />
       </Link>
 
-      <div className="my-1.5 h-px w-8 rounded-full bg-black/[0.06]" />
+      <div className="my-2 h-px w-6 bg-[var(--nf-border-invisible)]" />
 
-      <div className="flex flex-col items-center gap-1 rounded-2xl border border-black/[0.05] bg-[#f6f5f4]/70 p-1.5 shadow-[0_1px_4px_rgba(0,0,0,0.03)] backdrop-blur-xl">
+      <nav className="flex flex-col items-center gap-1">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive =
@@ -57,38 +64,43 @@ export function IconRail() {
               href={item.href}
               title={item.label}
               className={cn(
-                "flex h-10 w-10 items-center justify-center rounded-xl transition-all hover:scale-110 active:scale-95",
+                "group relative flex h-10 w-10 items-center justify-center rounded-[4px] border transition-[border-color,color,box-shadow,background-color] duration-200",
                 isActive
-                  ? "bg-scrub/10 text-scrub shadow-sm"
-                  : "text-foreground/50 hover:bg-black/[0.04] hover:text-foreground"
+                  ? "border-[rgba(255,109,31,0.4)] bg-[var(--nf-accent-muted)] text-[var(--nf-accent)] shadow-[var(--nf-glow-md)]"
+                  : "border-transparent text-[var(--nf-text-tertiary)] hover:border-[var(--nf-border-visible)] hover:text-[var(--nf-text-hover)]"
               )}
             >
-              <Icon className="h-5 w-5" />
+              <Icon className="h-4 w-4" strokeWidth={1.75} />
+              {isActive && (
+                <span className="absolute -left-[7px] top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-full bg-[var(--nf-accent)] shadow-[0_0_4px_rgba(255,109,31,0.7)]" />
+              )}
             </Link>
           );
         })}
-      </div>
+      </nav>
 
-      <div className="mt-1 flex gap-1.5">
+      <div className="flex-1" />
+
+      <div className="mb-2 flex flex-col items-center gap-1">
         {navItems.map((item) => {
           const isActive =
             item.href === "/chat"
               ? pathname === "/chat" || pathname.startsWith("/chat/")
               : pathname.startsWith(item.href);
-
           return (
-            <div
+            <span
               key={item.href}
+              aria-hidden
               className={cn(
-                "h-1 w-1 rounded-full transition-colors",
-                isActive ? "bg-scrub" : "bg-transparent"
+                "font-mono text-[9px] font-semibold tracking-[0.1em] transition-colors",
+                isActive ? "text-[var(--nf-accent)]" : "text-[var(--nf-text-disabled)]"
               )}
-            />
+            >
+              {item.code}
+            </span>
           );
         })}
       </div>
-
-      <div className="flex-1" />
 
       <button
         onClick={async () => {
@@ -96,10 +108,10 @@ export function IconRail() {
           window.location.href = "/login";
         }}
         title="Logout"
-        className="mb-1 flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-all hover:scale-105 hover:bg-vitals-red/5 hover:text-vitals-red active:scale-95"
+        className="mb-1 flex h-9 w-9 items-center justify-center rounded-[4px] border border-[var(--nf-border-invisible)] text-[var(--nf-text-tertiary)] transition-[border-color,color,background-color] duration-200 hover:border-[rgba(217,106,94,0.4)] hover:bg-[rgba(217,106,94,0.06)] hover:text-[var(--nf-danger)]"
       >
-        <LogOut className="h-5 w-5" />
+        <LogOut className="h-4 w-4" strokeWidth={1.75} />
       </button>
-    </div>
+    </aside>
   );
 }

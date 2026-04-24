@@ -26,10 +26,10 @@ const typeConfig: Record<
   string,
   { icon: typeof HeartPulse; color: string; label: string }
 > = {
-  chart: { icon: HeartPulse, color: "text-scrub", label: "图表" },
-  image: { icon: ImageIcon, color: "text-plasma", label: "图片" },
-  pdf: { icon: FileText, color: "text-vitals-amber", label: "PDF" },
-  text: { icon: Type, color: "text-foreground/60", label: "文本" },
+  chart: { icon: HeartPulse, color: "text-term-green", label: "图表" },
+  image: { icon: ImageIcon, color: "text-term-cyan", label: "图片" },
+  pdf: { icon: FileText, color: "text-term-amber", label: "PDF" },
+  text: { icon: Type, color: "text-term-green-dim", label: "文本" },
 };
 
 function tickerToCode(ticker: string): string {
@@ -65,8 +65,8 @@ function ChartBody({ data, nodeId }: { data: CanvasNodeData; nodeId: string }) {
   if (!hasTicker) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 p-4 nodrag nowheel">
-        <HeartPulse className="h-8 w-8 text-scrub/30" />
-        <p className="text-xs text-foreground/40">输入股票代码查看走势</p>
+        <HeartPulse className="h-8 w-8 text-term-green/30" />
+        <p className="text-xs text-term-green-dim font-mono">Enter stock code</p>
         <div className="flex items-center gap-1.5 w-full max-w-[240px]">
           <div className="flex-1 relative">
             <input
@@ -74,19 +74,19 @@ function ChartBody({ data, nodeId }: { data: CanvasNodeData; nodeId: string }) {
               value={inputCode}
               onChange={(e) => setInputCode(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-              placeholder="例: 600276"
-              className="nodrag nowheel w-full h-8 rounded-lg bg-black/[0.03] border border-black/[0.06] px-3 pr-8 text-xs text-foreground placeholder:text-foreground/25 focus:outline-none focus:border-scrub/40"
+              placeholder="e.g. 600276"
+              className="nodrag nowheel w-full h-8 rounded-md bg-term-bg-surface border border-term-green/12 px-3 pr-8 text-xs text-term-green font-mono placeholder:text-term-green-dim/30 focus:outline-none focus:border-term-green/30"
             />
-            <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-foreground/25" />
+            <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-term-green-dim/40" />
           </div>
           <button
             onClick={handleSubmit}
-            className="nodrag h-8 px-3 rounded-lg bg-scrub text-white text-xs font-medium hover:bg-scrub/90 transition-colors shrink-0"
+            className="nodrag h-8 px-3 rounded-md bg-term-green/15 text-term-green text-xs font-mono hover:bg-term-green/25 transition-colors shrink-0"
           >
-            查询
+            Go
           </button>
         </div>
-        <p className="text-[10px] text-foreground/25">支持沪深 A 股代码，如 600276、300760</p>
+        <p className="text-[10px] text-term-green-dim/40 font-mono">A-share codes: 600276, 300760</p>
       </div>
     );
   }
@@ -94,7 +94,7 @@ function ChartBody({ data, nodeId }: { data: CanvasNodeData; nodeId: string }) {
   if (klineLoading || kline.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center">
-        <ECGCanvas condition="healthy" color="oklch(0.45 0.10 160)" height={120} speed={2} lineWidth={1.5} />
+        <ECGCanvas condition="healthy" color="#ff6d1f" height={120} speed={2} lineWidth={1.5} />
       </div>
     );
   }
@@ -184,7 +184,7 @@ function FileUploadBody({
   return (
     <div
       className={`flex-1 flex flex-col items-center justify-center gap-3 p-4 transition-colors nodrag nowheel ${
-        dragOver ? "bg-scrub/5" : ""
+        dragOver ? "bg-term-green/5" : ""
       }`}
       onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
       onDragLeave={() => setDragOver(false)}
@@ -192,21 +192,21 @@ function FileUploadBody({
     >
       {uploading ? (
         <>
-          <Loader2 className="h-8 w-8 text-scrub/40 animate-spin" />
-          <p className="text-xs text-foreground/40">上传中…</p>
+          <Loader2 className="h-8 w-8 text-term-green/40 animate-spin" />
+          <p className="text-xs text-term-green-dim font-mono">Uploading...</p>
         </>
       ) : (
         <>
-          <EmptyIcon className="h-8 w-8 text-foreground/15" />
-          <p className="text-xs text-foreground/40">{emptyText}</p>
+          <EmptyIcon className="h-8 w-8 text-term-green-dim/30" />
+          <p className="text-xs text-term-green-dim font-mono">{emptyText}</p>
           <button
             onClick={() => inputRef.current?.click()}
-            className="nodrag flex items-center gap-1.5 h-8 px-3 rounded-lg bg-black/[0.04] border border-black/[0.06] text-xs text-foreground/60 hover:bg-black/[0.06] transition-colors"
+            className="nodrag flex items-center gap-1.5 h-8 px-3 rounded-md bg-term-bg-surface border border-term-green/12 text-xs text-term-green-dim font-mono hover:bg-term-green/10 hover:text-term-green transition-colors"
           >
             <Upload className="h-3 w-3" />
-            选择文件
+            Browse
           </button>
-          <p className="text-[10px] text-foreground/25">或拖拽文件到此处</p>
+          <p className="text-[10px] text-term-green-dim/30 font-mono">or drag & drop</p>
           <input
             ref={inputRef}
             type="file"
@@ -271,26 +271,26 @@ function TextBody({ data, nodeId }: { data: CanvasNodeData; nodeId: string }) {
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
-      <div className="flex items-center gap-0.5 px-2 py-1 border-b border-black/[0.04] shrink-0">
+      <div className="flex items-center gap-0.5 px-2 py-1 border-b border-term-green/6 shrink-0">
         <button
           onClick={() => { if (mode === "edit") handleSave(); else setMode("preview"); }}
           className={cn(
-            "nodrag flex items-center gap-1 h-5 px-1.5 rounded text-[10px] transition-colors",
-            mode === "preview" ? "bg-black/[0.06] text-foreground/70 font-medium" : "text-foreground/40 hover:text-foreground/60",
+            "nodrag flex items-center gap-1 h-5 px-1.5 rounded text-[10px] font-mono transition-colors",
+            mode === "preview" ? "bg-term-green/10 text-term-green" : "text-term-green-dim hover:text-term-green",
           )}
         >
           <Eye className="h-2.5 w-2.5" />
-          预览
+          Preview
         </button>
         <button
           onClick={() => setMode("edit")}
           className={cn(
-            "nodrag flex items-center gap-1 h-5 px-1.5 rounded text-[10px] transition-colors",
-            mode === "edit" ? "bg-black/[0.06] text-foreground/70 font-medium" : "text-foreground/40 hover:text-foreground/60",
+            "nodrag flex items-center gap-1 h-5 px-1.5 rounded text-[10px] font-mono transition-colors",
+            mode === "edit" ? "bg-term-green/10 text-term-green" : "text-term-green-dim hover:text-term-green",
           )}
         >
           <Pencil className="h-2.5 w-2.5" />
-          编辑
+          Edit
         </button>
       </div>
 
@@ -302,7 +302,7 @@ function TextBody({ data, nodeId }: { data: CanvasNodeData; nodeId: string }) {
             onBlur={handleSave}
             autoFocus
             className="nodrag nowheel w-full h-full resize-none bg-transparent text-xs leading-relaxed text-foreground p-2 focus:outline-none font-mono"
-            placeholder="支持 Markdown 语法…"
+            placeholder="Markdown supported..."
           />
         </div>
       ) : (
@@ -316,7 +316,7 @@ function TextBody({ data, nodeId }: { data: CanvasNodeData; nodeId: string }) {
               className="flex items-center justify-center h-full cursor-pointer"
               onClick={() => setMode("edit")}
             >
-              <span className="text-foreground/25 text-xs">点击编辑文本…</span>
+              <span className="text-term-green-dim/40 text-xs font-mono">Click to edit...</span>
             </div>
           )}
         </div>
@@ -338,24 +338,24 @@ function CanvasCardNodeInner({ data, id }: NodeProps) {
   }, [removeNode, id]);
 
   return (
-    <div className="flex flex-col h-full rounded-xl bg-[#f6f5f4]/90 backdrop-blur-xl border border-black/[0.06] shadow-[0_2px_8px_rgba(0,0,0,0.05)] overflow-hidden group">
+    <div className="flex flex-col h-full rounded-lg bg-term-bg-raised/90 backdrop-blur-xl border border-term-green/10 shadow-[0_2px_8px_rgba(0,0,0,0.2)] overflow-hidden group">
       <NodeResizer
         minWidth={200}
         minHeight={120}
-        lineClassName="!border-scrub/30"
-        handleClassName="!w-2.5 !h-2.5 !bg-scrub/50 !border-0 !rounded-full"
+        lineClassName="!border-term-green/30"
+        handleClassName="!w-2.5 !h-2.5 !bg-term-green/50 !border-0 !rounded-full"
       />
-      <div className="flex items-center h-7 px-2 gap-1.5 border-b border-black/[0.04] bg-[#eceae8]/40 shrink-0 drag-handle cursor-grab active:cursor-grabbing">
-        <GripVertical className="h-3 w-3 text-foreground/20" />
+      <div className="flex items-center h-7 px-2 gap-1.5 border-b border-term-green/8 bg-term-bg/60 shrink-0 drag-handle cursor-grab active:cursor-grabbing">
+        <GripVertical className="h-3 w-3 text-term-green-dim/40" />
         <Icon className={`h-3 w-3 ${config.color}`} />
-        <span className="text-[10px] font-medium text-foreground/60 truncate flex-1">
+        <span className="text-[10px] font-mono text-term-green-dim truncate flex-1">
           {nodeData.label || config.label}
         </span>
         <button
           onClick={handleRemove}
-          className="nodrag h-4 w-4 flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 hover:bg-black/[0.06] transition-opacity"
+          className="nodrag h-4 w-4 flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 hover:bg-term-red/10 transition-opacity"
         >
-          <X className="h-2.5 w-2.5 text-foreground/40" />
+          <X className="h-2.5 w-2.5 text-term-red/60" />
         </button>
       </div>
 
@@ -365,13 +365,13 @@ function CanvasCardNodeInner({ data, id }: NodeProps) {
       {nodeData.nodeType === "text" && <TextBody data={nodeData} nodeId={id} />}
 
       {nodeData.description && (
-        <div className="px-2 py-1 border-t border-black/[0.04] text-[9px] text-foreground/40 truncate">
+        <div className="px-2 py-1 border-t border-term-green/6 text-[9px] font-mono text-term-green-dim truncate">
           {nodeData.description}
         </div>
       )}
 
-      <Handle type="target" position={Position.Left} className="!w-3 !h-3 !bg-scrub/40 !border-2 !border-white hover:!bg-scrub !transition-colors" />
-      <Handle type="source" position={Position.Right} className="!w-3 !h-3 !bg-scrub/40 !border-2 !border-white hover:!bg-scrub !transition-colors" />
+      <Handle type="target" position={Position.Left} className="!w-3 !h-3 !bg-term-green/40 !border-2 !border-term-bg hover:!bg-term-green !transition-colors" />
+      <Handle type="source" position={Position.Right} className="!w-3 !h-3 !bg-term-green/40 !border-2 !border-term-bg hover:!bg-term-green !transition-colors" />
     </div>
   );
 }

@@ -141,8 +141,8 @@ function CanvasInner({ conversationId }: InfiniteCanvasProps) {
         ...connection,
         id: `edge-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         animated: true,
-        style: { stroke: "oklch(0.45 0.10 160)", strokeWidth: 2 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: "oklch(0.45 0.10 160)", width: 16, height: 16 },
+        style: { stroke: "#ff6d1f", strokeWidth: 1.5 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: "#ff6d1f", width: 16, height: 16 },
       };
       setEdges(addEdge(newEdge, current));
     },
@@ -152,10 +152,10 @@ function CanvasInner({ conversationId }: InfiniteCanvasProps) {
   const miniMapNodeColor = useCallback((node: Node) => {
     const d = node.data as CanvasNodeData;
     switch (d?.nodeType) {
-      case "chart": return "oklch(0.45 0.10 160)";
-      case "image": return "oklch(0.48 0.10 195)";
-      case "pdf": return "oklch(0.52 0.10 80)";
-      default: return "oklch(0.70 0 0)";
+      case "chart": return "#ff6d1f";
+      case "image": return "#06B6D4";
+      case "pdf": return "#F59E0B";
+      default: return "#9CA3AF";
     }
   }, []);
 
@@ -176,26 +176,26 @@ function CanvasInner({ conversationId }: InfiniteCanvasProps) {
           fitViewOptions={{ padding: 0.3 }}
           proOptions={proOptions}
           defaultEdgeOptions={{ animated: true }}
-          connectionLineStyle={{ stroke: "oklch(0.45 0.10 160)", strokeWidth: 2 }}
+          connectionLineStyle={{ stroke: "#ff6d1f", strokeWidth: 1.5 }}
           minZoom={0.1}
           maxZoom={3}
           className={cn(isEmpty && "pointer-events-none")}
         >
-          <Background variant={BackgroundVariant.Dots} gap={18} size={1.5} color="rgba(0,0,0,0.18)" />
+          <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="rgba(255,255,255,0.05)" />
           {!isEmpty && (
             <>
               <Controls
                 position="bottom-left"
-                className="!bg-[#f6f5f4]/80 !backdrop-blur-xl !border-black/[0.05] !rounded-xl !shadow-sm [&>button]:!border-black/[0.04] [&>button]:!bg-transparent [&>button:hover]:!bg-black/[0.03]"
+                className="!bg-term-bg-raised/80 !backdrop-blur-xl !border-term-green/10 !rounded-lg !shadow-sm [&>button]:!border-term-green/8 [&>button]:!bg-transparent [&>button]:!text-term-green-dim [&>button:hover]:!bg-term-bg-surface [&>button:hover]:!text-term-green"
               />
               <MiniMap
                 nodeColor={miniMapNodeColor}
-                maskColor="rgba(0,0,0,0.04)"
-                className="!bg-[#f6f5f4]/60 !backdrop-blur-xl !border-black/[0.05] !rounded-xl !shadow-sm"
+                maskColor="oklch(0 0 0 / 30%)"
+                className="!bg-term-bg-raised/60 !backdrop-blur-xl !border-term-green/10 !rounded-lg !shadow-sm"
                 position="bottom-right"
               />
               <Panel position="top-right" className="!m-3">
-                <div className="flex items-center gap-1 rounded-xl bg-[#f6f5f4]/90 backdrop-blur-xl border border-black/[0.06] p-1 shadow-md">
+                <div className="flex items-center gap-1 rounded-lg bg-term-bg-raised/90 backdrop-blur-xl border border-term-green/10 p-1 shadow-md font-mono">
                   <ToolbarButton icon={HeartPulse} label="图表" onClick={() => handleAdd("chart")} />
                   <ToolbarButton icon={ImageIcon} label="图片" onClick={() => handleAdd("image")} />
                   <ToolbarButton icon={FileText} label="PDF" onClick={() => handleAdd("pdf")} />
@@ -208,17 +208,17 @@ function CanvasInner({ conversationId }: InfiniteCanvasProps) {
       </div>
 
       {loading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white/30 z-10">
-          <Loader2 className="h-5 w-5 animate-spin text-foreground/30" />
+        <div className="absolute inset-0 flex items-center justify-center bg-term-bg/50 z-10">
+          <Loader2 className="h-5 w-5 animate-spin text-term-green-dim" />
         </div>
       )}
 
       {isEmpty && (
         <div className="absolute inset-0 flex items-center justify-center z-10">
-          <div className="text-center space-y-5">
-            <div className="text-sm font-medium text-foreground/35">画布为空</div>
-            <div className="text-xs text-foreground/25 max-w-[220px] mx-auto leading-relaxed">
-              AI 分析结果会自动添加到画布，<br />也可手动添加内容
+          <div className="text-center space-y-5 font-mono">
+            <div className="text-sm text-term-green-dim">Canvas Empty</div>
+            <div className="text-xs text-term-green-dim/50 max-w-[220px] mx-auto leading-relaxed">
+              AI analysis will appear here automatically,<br />or add content manually
             </div>
             <div className="grid grid-cols-2 gap-2.5 pt-1">
               <AddButton icon={HeartPulse} label="股票图表" onClick={() => handleAdd("chart")} />
@@ -253,10 +253,10 @@ function AddButton({
   return (
     <button
       onClick={onClick}
-      className="flex flex-col items-center gap-2 px-5 py-4 rounded-xl bg-[#f6f5f4]/80 border border-black/[0.06] hover:bg-[#eceae8] hover:shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+      className="flex flex-col items-center gap-2 rounded-[4px] border border-[var(--nf-border-invisible)] bg-[var(--nf-bg-surface)] px-5 py-4 transition-[border-color,background-color,box-shadow] duration-200 hover:border-[rgba(255,109,31,0.35)] hover:bg-[var(--nf-accent-muted)] hover:shadow-[var(--nf-glow-sm)] active:scale-[0.98] cursor-pointer"
     >
-      <Icon className="h-6 w-6 text-scrub" />
-      <span className="text-xs font-medium text-foreground/60">{label}</span>
+      <Icon className="h-6 w-6 text-term-green" />
+      <span className="text-xs font-mono text-term-green-dim">{label}</span>
     </button>
   );
 }
@@ -275,8 +275,8 @@ function ToolbarButton({
       onClick={onClick}
       title={label}
       className={cn(
-        "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-foreground/60",
-        "hover:text-foreground hover:bg-black/[0.06] active:bg-black/[0.08] transition-colors cursor-pointer",
+        "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[11px] font-mono text-term-green-dim",
+        "hover:text-term-green hover:bg-term-bg-surface active:bg-term-bg transition-colors cursor-pointer",
       )}
     >
       <Icon className="h-3.5 w-3.5" />

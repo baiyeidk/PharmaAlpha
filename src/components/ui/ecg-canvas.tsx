@@ -47,7 +47,7 @@ const WAVEFORMS: Record<Condition, number[]> = {
 
 export function ECGCanvas({
   condition = "healthy",
-  color = "oklch(0.68 0.20 150)",
+  color = "#10B981",
   speed = 2,
   height = 32,
   className,

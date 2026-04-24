@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import Image from "next/image";
+import { AlertTriangle, ArrowLeft, ArrowRight, UserPlus2 } from "lucide-react";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -28,7 +28,7 @@ export default function RegisterPage() {
 
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error || "注册失败");
+        setError(data.error || "Registration failed");
         setLoading(false);
         return;
       }
@@ -36,98 +36,143 @@ export default function RegisterPage() {
       router.push("/chat");
       router.refresh();
     } catch {
-      setError("系统异常，请稍后重试");
+      setError("System error. Retry later.");
       setLoading(false);
     }
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-[#f0eee9] via-[#eae8e4] to-[#ede9e3]" />
-
-      <div className="relative w-full max-w-[420px] px-6">
-        <div className="rounded-2xl overflow-hidden bg-[#f6f5f4]/80 backdrop-blur-2xl shadow-[0_4px_24px_rgba(0,0,0,0.06),0_1px_4px_rgba(0,0,0,0.04)] border border-black/[0.05]">
-          {/* macOS title bar */}
-          <div className="flex h-10 items-center px-4 gap-3 border-b border-black/[0.05] bg-[#eceae8]/50">
-            <div className="flex items-center gap-[7px]">
-              <div className="h-3 w-3 rounded-full bg-[#EC6A5E] border border-[#D1503F]/40" />
-              <div className="h-3 w-3 rounded-full bg-[#F4BF4F] border border-[#D49E28]/40" />
-              <div className="h-3 w-3 rounded-full bg-[#61C554] border border-[#4CA93B]/40" />
+    <div className="nf-page nf-scroll min-h-screen overflow-y-auto p-6 pb-16">
+      <div className="mx-auto flex min-h-[calc(100vh-48px)] max-w-[1400px] flex-col gap-6">
+        <header className="flex flex-wrap items-end justify-between gap-4 border-b border-[var(--nf-border-invisible)] pb-5">
+          <div className="flex min-w-0 flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <span className="nf-nano">AUTH / 02</span>
+              <span className="h-px w-10 bg-[var(--nf-border-visible)]" />
+              <span className="nf-nano nf-text-accent">NEW_OPERATOR</span>
             </div>
-            <span className="text-[13px] text-foreground/50 font-medium">账号注册</span>
+            <div className="flex items-center gap-3">
+              <Image
+                src="/logo.png"
+                alt="PharmaAlpha"
+                width={36}
+                height={36}
+                priority
+                className="h-9 w-9 rounded-[4px] border border-[var(--nf-border-invisible)] object-cover"
+              />
+              <h1 className="nf-h1">Provision Account</h1>
+            </div>
+            <p className="nf-sub max-w-2xl">
+              Create an operator account. Password is stored hashed; email is the canonical handle.
+            </p>
+          </div>
+          <Link href="/" className="nf-btn">
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back
+          </Link>
+        </header>
+
+        <section className="nf-card p-5">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <UserPlus2 className="h-3.5 w-3.5 nf-text-accent" />
+              <h2 className="nf-h2">Operator Profile</h2>
+            </div>
+            <span className="nf-nano">01</span>
           </div>
 
-          <div className="p-8">
-            <div className="mb-6 text-center">
-              <h1 className="text-2xl font-bold text-foreground">创建账号</h1>
-              <p className="mt-1 text-sm text-foreground/50">注册后即可使用投资分析平台</p>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            {error && (
+              <div className="flex items-start gap-2 rounded-[4px] border border-[rgba(217,106,94,0.3)] bg-[rgba(217,106,94,0.06)] px-3 py-2 text-[11px] font-mono text-[var(--nf-danger)] tracking-[0.03em]">
+                <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                <span>
+                  <span className="font-semibold uppercase tracking-[0.1em]">ERR</span> · {error}
+                </span>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <label htmlFor="name" className="nf-label">Username</label>
+              <input
+                id="name"
+                type="text"
+                placeholder="operator_handle"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="nf-input"
+              />
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {error && (
-                <div className="rounded-xl bg-vitals-red/5 border border-vitals-red/20 px-4 py-3 text-sm text-vitals-red">
-                  {error}
-                </div>
-              )}
-              <div className="space-y-1.5">
-                <label htmlFor="name" className="text-sm font-medium text-foreground/60">
-                  用户名
-                </label>
-                <Input
-                  id="name"
-                  type="text"
-                  placeholder="请输入您的姓名"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="rounded-xl bg-black/[0.02] border-black/[0.06] text-base h-11 focus:border-scrub/50 focus-visible:ring-scrub/20"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label htmlFor="email" className="text-sm font-medium text-foreground/60">
-                  邮箱账号
-                </label>
-                <Input
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label htmlFor="email" className="nf-label">Email</label>
+                <input
                   id="email"
                   type="email"
-                  placeholder="your@email.com"
+                  placeholder="operator@pharma.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="rounded-xl bg-black/[0.02] border-black/[0.06] text-base h-11 focus:border-scrub/50 focus-visible:ring-scrub/20"
+                  className="nf-input"
                 />
               </div>
-              <div className="space-y-1.5">
-                <label htmlFor="password" className="text-sm font-medium text-foreground/60">
-                  设置密码
-                </label>
-                <Input
+
+              <div className="space-y-2">
+                <label htmlFor="password" className="nf-label">Password</label>
+                <input
                   id="password"
                   type="password"
-                  placeholder="至少 8 个字符"
+                  placeholder="min 8 characters"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={8}
-                  className="rounded-xl bg-black/[0.02] border-black/[0.06] text-base h-11 focus:border-scrub/50 focus-visible:ring-scrub/20"
+                  className="nf-input"
                 />
               </div>
-              <Button
+            </div>
+
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--nf-border-invisible)] pt-4">
+              <span className="nf-nano nf-text-tertiary">
+                HAVE_ACCOUNT?{" "}
+                <Link
+                  href="/login"
+                  className="nf-text-accent tracking-[0.1em] hover:text-[var(--nf-accent-hover)] transition-colors"
+                >
+                  LOGIN →
+                </Link>
+              </span>
+              <button
                 type="submit"
-                className="w-full bg-scrub text-white hover:bg-scrub/90 text-sm font-semibold rounded-xl h-11"
+                className="nf-btn nf-btn-primary"
                 disabled={loading}
               >
-                {loading ? "正在注册…" : "立即注册"}
-              </Button>
-            </form>
+                {loading ? (
+                  <span className="flex items-center gap-2">
+                    <span className="inline-block h-1 w-1 animate-pulse rounded-full bg-[var(--nf-accent)]" />
+                    Provisioning
+                  </span>
+                ) : (
+                  <>
+                    Create Account
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </section>
 
-            <p className="mt-6 text-center text-sm text-foreground/50">
-              已有账号？{" "}
-              <Link href="/login" className="text-scrub hover:text-scrub/80 transition-colors font-medium">
-                前往登录
-              </Link>
-            </p>
-          </div>
-        </div>
+        <footer className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-[var(--nf-border-invisible)] pt-4 nf-nano">
+          <span>© 2026 · PHARMAALPHA</span>
+          <span className="flex items-center gap-4">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-1 w-1 rounded-full bg-[var(--nf-success)]" />
+              TLS · 1.3
+            </span>
+            <span>SESSION · ANON</span>
+          </span>
+        </footer>
       </div>
     </div>
   );

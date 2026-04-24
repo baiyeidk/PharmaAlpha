@@ -142,14 +142,14 @@ export function ChatView({ conversationId }: ChatViewProps) {
     <div className="flex items-center gap-2">
       {agents.length > 0 && (
         <Select value={selectedAgentId} onValueChange={(v) => { if (v) setSelectedAgentId(v); }}>
-          <SelectTrigger className="h-6 w-[140px] border-black/[0.06] bg-black/[0.03] text-[11px] rounded-md px-2 py-0 text-foreground/70">
-            <SelectValue placeholder="选择智能体" />
+          <SelectTrigger className="h-6 w-[140px] border-border bg-term-bg-surface text-[11px] rounded-md px-2 py-0 text-muted-foreground font-mono">
+            <SelectValue placeholder="Select agent" />
           </SelectTrigger>
-          <SelectContent className="rounded-lg bg-white/90 backdrop-blur-xl border-black/[0.08] shadow-lg">
+          <SelectContent className="rounded-lg bg-term-bg-raised/95 backdrop-blur-xl border-term-green/12 shadow-lg">
             {agents.map((agent) => (
-              <SelectItem key={agent.id} value={agent.id} className="text-[11px] text-foreground rounded-md">
+              <SelectItem key={agent.id} value={agent.id} className="text-[11px] text-term-green font-mono rounded-md">
                 <div className="flex items-center gap-1.5">
-                  <Bot className="h-3 w-3 text-scrub" />
+                  <Bot className="h-3 w-3 text-term-green" />
                   {agent.displayName || agent.name}
                 </div>
               </SelectItem>
@@ -160,12 +160,12 @@ export function ChatView({ conversationId }: ChatViewProps) {
       <button
         onClick={() => setShowCases(!showCases)}
         className={cn(
-          "flex items-center gap-1 px-2 py-0.5 rounded-md transition-colors text-[11px]",
-          showCases ? "text-scrub bg-scrub/10" : "text-foreground/50 hover:text-foreground hover:bg-black/[0.04]"
+          "flex items-center gap-1 px-2 py-0.5 rounded-md transition-colors text-[11px] font-mono",
+          showCases ? "text-term-green bg-term-green/10" : "text-muted-foreground hover:text-foreground hover:bg-term-bg-surface"
         )}
       >
         <Clock className="h-3 w-3" />
-        历史
+        History
       </button>
     </div>
   );
@@ -212,12 +212,12 @@ export function ChatView({ conversationId }: ChatViewProps) {
       >
         <div className="flex flex-col h-full">
           {showCases && conversations.length > 0 && (
-            <div className="border-b border-black/[0.04] bg-black/[0.015] max-h-28 overflow-y-auto">
+            <div className="border-b border-term-green/8 bg-term-bg/50 max-h-28 overflow-y-auto font-mono">
               {conversations.slice(0, 10).map((c) => (
                 <a
                   key={c.id}
                   href={`/chat/${c.id}`}
-                  className="flex items-center gap-2 px-4 py-1.5 text-[11px] text-foreground/50 hover:text-foreground hover:bg-black/[0.02] transition-colors"
+                  className="flex items-center gap-2 px-4 py-1.5 text-[11px] text-muted-foreground hover:text-foreground hover:bg-term-bg-surface transition-colors"
                 >
                   <span className="opacity-60">{timeAgo(c.updatedAt)}</span>
                   <span className="truncate">{c.title}</span>
@@ -255,7 +255,7 @@ export function ChatView({ conversationId }: ChatViewProps) {
           onMouseDown={handleDividerMouseDown}
           className="w-3 shrink-0 flex items-center justify-center cursor-col-resize group z-10"
         >
-          <div className="w-[3px] h-10 rounded-full bg-black/[0.08] group-hover:bg-scrub/40 group-active:bg-scrub/60 transition-colors" />
+          <div className="w-[3px] h-10 rounded-full bg-term-green/10 group-hover:bg-term-green/30 group-active:bg-term-green/50 transition-colors" />
         </div>
       )}
 
@@ -318,23 +318,23 @@ function CanvasToolbar() {
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] text-foreground/50 hover:text-foreground hover:bg-black/[0.04] transition-colors"
+        className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] text-muted-foreground hover:text-foreground hover:bg-term-bg-surface transition-colors font-mono"
       >
         <Plus className="h-3 w-3" />
-        添加
+        Add
       </button>
 
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 z-50 w-36 rounded-xl bg-[#f6f5f4]/95 backdrop-blur-2xl border border-black/[0.06] shadow-lg p-1">
+          <div className="absolute right-0 top-full mt-1 z-50 w-36 rounded-lg bg-term-bg-raised/95 backdrop-blur-2xl border border-term-green/12 shadow-lg p-1 font-mono">
             {addItems.map(({ type, icon: Icon, label }) => (
               <button
                 key={type}
                 onClick={() => handleAdd(type)}
-                className="flex items-center gap-2 w-full px-2.5 py-2 rounded-lg text-xs text-foreground/70 hover:text-foreground hover:bg-black/[0.04] transition-colors"
+                className="flex items-center gap-2 w-full px-2.5 py-2 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-term-bg-surface transition-colors"
               >
-                <Icon className="h-3.5 w-3.5 text-scrub" />
+                <Icon className="h-3.5 w-3.5 text-term-green" />
                 {label}
               </button>
             ))}
