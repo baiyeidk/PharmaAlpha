@@ -34,4 +34,4 @@ ENV PORT=3000
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "until pg_isready -h db -U postgres; do echo 'waiting for db...'; sleep 2; done && psql \"$DATABASE_URL\" -c 'CREATE EXTENSION IF NOT EXISTS vector;' && npx prisma db push --accept-data-loss && npm start"]
+CMD ["sh", "-c", "until pg_isready -h db -U postgres; do echo 'waiting for db...'; sleep 2; done && psql postgresql://postgres:postgres@db:5432/pharma_alpha -c 'CREATE EXTENSION IF NOT EXISTS vector;' && npx prisma db push --accept-data-loss && npm start"]
