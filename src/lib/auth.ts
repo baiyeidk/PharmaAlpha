@@ -8,6 +8,18 @@ const JWT_SECRET = new TextEncoder().encode(
 
 const COOKIE_NAME = "pa-session";
 
+function shouldUseSecureCookie(): boolean {
+  if (process.env.COOKIE_SECURE === "true") return true;
+  if (process.env.COOKIE_SECURE === "false") return false;
+
+  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "";
+  if (appUrl) {
+    return appUrl.startsWith("https://");
+  }
+
+  return process.env.NODE_ENV === "production";
+}
+
 export interface SessionUser {
   id: string;
   email: string;
@@ -24,7 +36,7 @@ export async function createSession(user: SessionUser): Promise<string> {
   const cookieStore = await cookies();
   cookieStore.set(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: shouldUseSecureCookie(),
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
