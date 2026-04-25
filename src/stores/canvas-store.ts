@@ -1,6 +1,7 @@
 import type React from "react";
 import { create } from "zustand";
 import type { Node, Edge } from "@xyflow/react";
+import { createId } from "@/lib/utils";
 
 export type CanvasNodeType = "chart" | "image" | "pdf" | "text";
 
@@ -245,7 +246,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     const y = maxY + 30;
     const w = 340;
     const h = type === "text" ? 180 : 280;
-    const tempId = crypto.randomUUID();
+    const tempId = createId("canvas");
 
     const rfNode: Node<CanvasNodeData> = {
       id: tempId,

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import { createId } from "@/lib/utils";
 
 export interface ToolEvent {
   id: string;
@@ -109,7 +110,7 @@ export function useChatStream({
   const sendMessage = useCallback(
     async (content: string) => {
       const text = content.trim();
-      const debugId = crypto.randomUUID();
+      const debugId = createId("debug");
       if (!text || isLoading) {
         console.info("[chat-stream] blocked send", {
           debugId,
@@ -126,7 +127,7 @@ export function useChatStream({
         setMessages((prev) => [
           ...prev,
           {
-            id: crypto.randomUUID(),
+            id: createId("msg"),
             role: "assistant",
             content: "Cannot send message: no agent selected.",
             isStreaming: false,
@@ -136,12 +137,12 @@ export function useChatStream({
       }
 
       const userMessage: ChatMessage = {
-        id: crypto.randomUUID(),
+        id: createId("msg"),
         role: "user",
         content: text,
       };
 
-      const assistantId = crypto.randomUUID();
+      const assistantId = createId("msg");
       const assistantMessage: ChatMessage = {
         id: assistantId,
         role: "assistant",
@@ -171,7 +172,7 @@ export function useChatStream({
           return last.id;
         }
         const block: MessageBlock = {
-          id: crypto.randomUUID(),
+          id: createId("block"),
           type: "supervisor",
           content: "",
           toolEvents: [],
@@ -268,7 +269,7 @@ export function useChatStream({
                 const round = chunk.round || 1;
                 if (phase === "synthesize") {
                   const block: MessageBlock = {
-                    id: crypto.randomUUID(),
+                    id: createId("block"),
                     type: "supervisor",
                     content: "",
                     toolEvents: [],
@@ -278,7 +279,7 @@ export function useChatStream({
                   activePhaseBlock = block.id;
                 } else {
                   const block: MessageBlock = {
-                    id: crypto.randomUUID(),
+                    id: createId("block"),
                     type: "phase",
                     phase,
                     round,
@@ -329,7 +330,7 @@ export function useChatStream({
                   prevBlock.status = "done";
                 }
                 const block: MessageBlock = {
-                  id: crypto.randomUUID(),
+                  id: createId("block"),
                   type: "sub_agent",
                   agentName: chunk.agent_name,
                   task: chunk.task,
@@ -351,7 +352,7 @@ export function useChatStream({
                 const targetBlock = getActivePhaseBlock() || currentBlocks[currentBlocks.length - 1];
                 if (targetBlock) {
                   targetBlock.toolEvents.push({
-                    id: crypto.randomUUID(),
+                    id: createId("tool"),
                     name: chunk.name,
                     args: chunk.args,
                     status: "running",
