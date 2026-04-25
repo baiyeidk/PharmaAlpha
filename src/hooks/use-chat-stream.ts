@@ -108,8 +108,21 @@ export function useChatStream({
 
   const sendMessage = useCallback(
     async (content: string) => {
-      if (!content.trim() || isLoading) return;
+      const text = content.trim();
+      const debugId = crypto.randomUUID();
+      if (!text || isLoading) {
+        console.info("[chat-stream] blocked send", {
+          debugId,
+          hasText: !!text,
+          isLoading,
+        });
+        return;
+      }
       if (!agentId) {
+        console.warn("[chat-stream] blocked send: missing agentId", {
+          debugId,
+          conversationId: conversationId || "new",
+        });
         setMessages((prev) => [
           ...prev,
           {
@@ -125,7 +138,7 @@ export function useChatStream({
       const userMessage: ChatMessage = {
         id: crypto.randomUUID(),
         role: "user",
-        content: content.trim(),
+        content: text,
       };
 
       const assistantId = crypto.randomUUID();
@@ -183,15 +196,30 @@ export function useChatStream({
       }
 
       try {
+        console.info("[chat-stream] fetch start", {
+          debugId,
+          agentId,
+          conversationId: conversationId || "new",
+          length: text.length,
+        });
         const res = await fetch("/api/chat", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "x-chat-debug-id": debugId,
+          },
           body: JSON.stringify({
             agentId,
             conversationId,
-            newMessage: content.trim(),
+            newMessage: text,
+            debugId,
           }),
           signal: abortRef.current.signal,
+        });
+        console.info("[chat-stream] fetch response", {
+          debugId,
+          ok: res.ok,
+          status: res.status,
         });
 
         if (!res.ok) {
@@ -381,6 +409,10 @@ export function useChatStream({
           }
         }
       } catch (err) {
+        console.error("[chat-stream] fetch failed", {
+          debugId,
+          error: err instanceof Error ? err.message : String(err),
+        });
         if ((err as Error).name !== "AbortError") {
           setMessages((prev) =>
             prev.map((m) =>
@@ -391,6 +423,7 @@ export function useChatStream({
           );
         }
       } finally {
+        console.info("[chat-stream] request finished", { debugId });
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId ? { ...m, isStreaming: false } : m

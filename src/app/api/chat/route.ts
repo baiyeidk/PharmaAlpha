@@ -170,21 +170,22 @@ async function extractMemoryWithLLM(
 }
 
 export async function POST(req: Request) {
-  console.info("[api/chat] request received");
+  const debugId = req.headers.get("x-chat-debug-id") || crypto.randomUUID();
+  console.info(`[api/chat] request received debugId=${debugId}`);
   const session = await getSession();
   if (!session?.id) {
-    console.warn("[api/chat] unauthorized");
+    console.warn(`[api/chat] unauthorized debugId=${debugId}`);
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = await req.json();
   const { agentId } = body;
   console.info(
-    `[api/chat] payload user=${session.id} agentId=${agentId || "none"} conversationId=${body.conversationId || "new"}`
+    `[api/chat] payload debugId=${debugId} user=${session.id} agentId=${agentId || "none"} conversationId=${body.conversationId || "new"}`
   );
 
   if (!agentId) {
-    console.warn("[api/chat] missing agentId");
+    console.warn(`[api/chat] missing agentId debugId=${debugId}`);
     return NextResponse.json(
       { error: "agentId is required" },
       { status: 400 }
@@ -193,7 +194,7 @@ export async function POST(req: Request) {
 
   const agent = await getAgentById(agentId);
   if (!agent || !agent.enabled) {
-    console.warn(`[api/chat] agent not found or disabled: ${agentId}`);
+    console.warn(`[api/chat] agent not found or disabled debugId=${debugId}: ${agentId}`);
     return NextResponse.json({ error: "Agent not found" }, { status: 404 });
   }
 
@@ -346,6 +347,6 @@ export async function POST(req: Request) {
     .pipeThrough(captureAndForward)
     .pipeThrough(sseEncoder());
 
-  console.info(`[api/chat] stream started user=${session.id} agent=${agent.name} conversationId=${convId}`);
+  console.info(`[api/chat] stream started debugId=${debugId} user=${session.id} agent=${agent.name} conversationId=${convId}`);
   return new Response(responseBody, { headers: sseHeaders() });
 }

@@ -31,7 +31,15 @@ export function ChatInput({
 
   function handleSubmit(e?: React.FormEvent) {
     e?.preventDefault();
-    if (!canSubmit) return;
+    if (!canSubmit) {
+      console.info("[chat-input] blocked submit", {
+        hasText: !!input.trim(),
+        isLoading,
+        disabled,
+      });
+      return;
+    }
+    console.info("[chat-input] submit", { length: input.trim().length });
     onSend(input);
     setInput("");
   }
