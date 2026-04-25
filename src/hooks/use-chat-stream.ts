@@ -109,6 +109,18 @@ export function useChatStream({
   const sendMessage = useCallback(
     async (content: string) => {
       if (!content.trim() || isLoading) return;
+      if (!agentId) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: "Cannot send message: no agent selected.",
+            isStreaming: false,
+          },
+        ]);
+        return;
+      }
 
       const userMessage: ChatMessage = {
         id: crypto.randomUUID(),

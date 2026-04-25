@@ -58,7 +58,7 @@ interface ChatViewProps {
 }
 
 export function ChatView({ conversationId }: ChatViewProps) {
-  const { agents, loading: agentsLoading } = useAgents();
+  const { agents, loading: agentsLoading, error: agentsError } = useAgents();
   const [selectedAgentId, setSelectedAgentId] = useState<string>("");
   const addNodeAndSave = useCanvasStore((s) => s.addNodeAndSave);
   const loadFromServer = useCanvasStore((s) => s.loadFromServer);
@@ -136,6 +136,14 @@ export function ChatView({ conversationId }: ChatViewProps) {
   }, [messages, addNodeAndSave, activeConvId]);
 
   const noAgent = !agentsLoading && agents.length === 0;
+  const inputDisabled = !selectedAgentId || noAgent;
+  const inputPlaceholder = agentsLoading
+    ? "Loading agents..."
+    : agentsError
+      ? `Agent load failed: ${agentsError}`
+      : noAgent
+        ? "No available agents. Please check login/session."
+        : "Type a command...";
   const showCanvas = !!activeConvId;
 
   const chatTitleRight = (
@@ -239,11 +247,17 @@ export function ChatView({ conversationId }: ChatViewProps) {
           </div>
 
           <div className="p-3 pt-0">
+            {agentsError && (
+              <div className="mb-2 rounded-md border border-term-red/20 bg-term-red/5 px-3 py-2 text-xs font-mono text-term-red">
+                Agent list failed to load: {agentsError}
+              </div>
+            )}
             <ChatInput
               onSend={sendMessage}
               onStop={stopGeneration}
               isLoading={isLoading}
-              disabled={!selectedAgentId || noAgent}
+              disabled={inputDisabled}
+              placeholder={inputPlaceholder}
             />
           </div>
         </div>
