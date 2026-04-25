@@ -1,4 +1,5 @@
-FROM node:20-slim AS base
+ARG NODE_IMAGE=docker.1ms.run/library/node:20-slim
+FROM ${NODE_IMAGE} AS base
 
 RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g; s|security.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
     sed -i 's|deb.debian.org|mirrors.aliyun.com|g; s|security.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list 2>/dev/null || true

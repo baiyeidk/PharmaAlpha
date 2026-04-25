@@ -116,3 +116,18 @@ Agents communicate via stdin/stdout JSON Lines:
 {"type": "chunk", "content": "partial text..."}
 {"type": "result", "content": "final text...", "metadata": {}}
 ```
+
+## Spec 驱动开发
+
+使用仓库内模板，以 Spec 优先的方式推进功能开发：
+
+- `docs/spec-driven/INVESTMENT_AGENT_SPEC_TEMPLATE.md`：功能规格模板
+- `docs/spec-driven/COPILOT_SPEC_PROMPTS.md`：可复用 Copilot 提示词
+- `docs/spec-driven/SPEC_WORKFLOW_CHECKLIST.md`：执行与发布检查清单
+
+推荐流程：
+
+1. 先编写 Spec
+2. 根据 Spec 设计测试
+3. 以最小实现满足验收标准
+4. 执行 Spec 覆盖审计与安全闸门审查
