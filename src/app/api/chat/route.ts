@@ -170,15 +170,21 @@ async function extractMemoryWithLLM(
 }
 
 export async function POST(req: Request) {
+  console.info("[api/chat] request received");
   const session = await getSession();
   if (!session?.id) {
+    console.warn("[api/chat] unauthorized");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = await req.json();
   const { agentId } = body;
+  console.info(
+    `[api/chat] payload user=${session.id} agentId=${agentId || "none"} conversationId=${body.conversationId || "new"}`
+  );
 
   if (!agentId) {
+    console.warn("[api/chat] missing agentId");
     return NextResponse.json(
       { error: "agentId is required" },
       { status: 400 }
@@ -187,6 +193,7 @@ export async function POST(req: Request) {
 
   const agent = await getAgentById(agentId);
   if (!agent || !agent.enabled) {
+    console.warn(`[api/chat] agent not found or disabled: ${agentId}`);
     return NextResponse.json({ error: "Agent not found" }, { status: 404 });
   }
 
@@ -339,5 +346,6 @@ export async function POST(req: Request) {
     .pipeThrough(captureAndForward)
     .pipeThrough(sseEncoder());
 
+  console.info(`[api/chat] stream started user=${session.id} agent=${agent.name} conversationId=${convId}`);
   return new Response(responseBody, { headers: sseHeaders() });
 }
