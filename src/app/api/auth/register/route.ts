@@ -5,6 +5,7 @@ import { createSession } from "@/lib/auth";
 
 export async function POST(req: Request) {
   try {
+    console.log("[auth/register] request received");
     const { name, email, password } = await req.json();
 
     if (!email || !password) {

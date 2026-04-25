@@ -5,6 +5,7 @@ import { createSession } from "@/lib/auth";
 
 export async function POST(req: Request) {
   try {
+    console.log("[auth/login] request received");
     const { email, password } = await req.json();
 
     if (!email || !password) {
@@ -24,7 +25,12 @@ export async function POST(req: Request) {
     await createSession({ id: user.id, email: user.email, name: user.name });
 
     return NextResponse.json({ user: { id: user.id, name: user.name, email: user.email } });
-  } catch {
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  } catch (error) {
+    console.error("Login error:", error);
+
+    const detail =
+      process.env.NODE_ENV !== "production" && error instanceof Error ? `: ${error.message}` : "";
+
+    return NextResponse.json({ error: `Internal server error${detail}` }, { status: 500 });
   }
 }

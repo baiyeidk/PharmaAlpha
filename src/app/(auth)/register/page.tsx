@@ -20,11 +20,17 @@ export default function RegisterPage() {
     setError("");
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, password }),
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!res.ok) {
         const data = await res.json();
@@ -35,8 +41,12 @@ export default function RegisterPage() {
 
       router.push("/chat");
       router.refresh();
-    } catch {
-      setError("System error. Retry later.");
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setError("Request timed out. Check network/server and retry.");
+      } else {
+        setError("System error. Retry later.");
+      }
       setLoading(false);
     }
   }
