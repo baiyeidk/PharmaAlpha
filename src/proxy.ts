@@ -6,7 +6,7 @@ const JWT_SECRET = new TextEncoder().encode(
   process.env.NEXTAUTH_SECRET || "fallback-secret-change-me"
 );
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const token = request.cookies.get("pa-session")?.value;
 
   if (!token) {
