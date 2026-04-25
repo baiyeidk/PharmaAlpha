@@ -21,7 +21,7 @@ export function ChatInput({
   const [input, setInput] = useState("");
   const [isComposing, setIsComposing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const isDisabled = disabled || isLoading;
+  const canSubmit = !disabled && !isLoading && !!input.trim();
 
   useEffect(() => {
     if (!isLoading) {
@@ -31,7 +31,7 @@ export function ChatInput({
 
   function handleSubmit(e?: React.FormEvent) {
     e?.preventDefault();
-    if (!input.trim() || isDisabled) return;
+    if (!canSubmit) return;
     onSend(input);
     setInput("");
   }
@@ -60,8 +60,8 @@ export function ChatInput({
         onCompositionStart={() => setIsComposing(true)}
         onCompositionEnd={() => setIsComposing(false)}
         placeholder={placeholder}
-        disabled={isDisabled}
-        className="flex-1 h-full bg-transparent px-1 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none disabled:opacity-40 font-mono"
+        disabled={disabled}
+        className="flex-1 h-full bg-transparent px-1 text-sm text-[var(--nf-text-input)] caret-[var(--nf-accent)] placeholder:text-muted-foreground/50 focus:outline-none disabled:opacity-40 font-mono"
       />
       {!isLoading && !input && (
         <span className="text-term-green cursor-blink mr-2">█</span>
@@ -78,7 +78,7 @@ export function ChatInput({
         input.trim() && (
           <button
             type="submit"
-            disabled={!input.trim() || isDisabled}
+            disabled={!canSubmit}
             className="flex h-6 px-2 items-center justify-center rounded-md bg-term-green/15 text-term-green text-xs hover:bg-term-green/25 transition-colors disabled:opacity-20 shrink-0 mr-1 font-mono glow-subtle"
           >
             ↵

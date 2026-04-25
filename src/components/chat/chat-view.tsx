@@ -73,11 +73,7 @@ export function ChatView({ conversationId }: ChatViewProps) {
     activeConvIdRef.current = activeConvId;
   }, [activeConvId]);
 
-  useEffect(() => {
-    if (agents.length > 0 && !selectedAgentId) {
-      setSelectedAgentId(agents[0].id);
-    }
-  }, [agents, selectedAgentId]);
+  const effectiveAgentId = selectedAgentId || agents[0]?.id || "";
 
   const handleToolCall = useCallback(
     (name: string, metadata: Record<string, unknown>) => {
@@ -97,7 +93,7 @@ export function ChatView({ conversationId }: ChatViewProps) {
   }, [loadFromServer]);
 
   const { messages, isLoading, sendMessage, stopGeneration } = useChatStream({
-    agentId: selectedAgentId,
+    agentId: effectiveAgentId,
     conversationId: activeConvId,
     onConversationCreated: (id) => {
       activeConvIdRef.current = id;
@@ -136,7 +132,10 @@ export function ChatView({ conversationId }: ChatViewProps) {
   }, [messages, addNodeAndSave, activeConvId]);
 
   const noAgent = !agentsLoading && agents.length === 0;
-  const inputDisabled = !selectedAgentId || noAgent;
+  const noAgentSelected = !noAgent && !effectiveAgentId;
+  // Keep the input editable even when agent loading fails so users can still type.
+  // Submission is guarded in useChatStream when no agent is selected.
+  const inputDisabled = false;
   const inputPlaceholder = agentsLoading
     ? "Loading agents..."
     : agentsError
@@ -149,7 +148,7 @@ export function ChatView({ conversationId }: ChatViewProps) {
   const chatTitleRight = (
     <div className="flex items-center gap-2">
       {agents.length > 0 && (
-        <Select value={selectedAgentId} onValueChange={(v) => { if (v) setSelectedAgentId(v); }}>
+        <Select value={effectiveAgentId} onValueChange={(v) => { if (v) setSelectedAgentId(v); }}>
           <SelectTrigger className="h-6 w-[140px] border-border bg-term-bg-surface text-[11px] rounded-md px-2 py-0 text-muted-foreground font-mono">
             <SelectValue placeholder="Select agent" />
           </SelectTrigger>
@@ -236,7 +235,7 @@ export function ChatView({ conversationId }: ChatViewProps) {
 
           <div className="flex-1 overflow-y-auto" ref={scrollRef}>
             {messages.length === 0 ? (
-              <WelcomeDashboard onSendPrompt={sendMessage} disabled={!selectedAgentId || noAgent} />
+              <WelcomeDashboard onSendPrompt={sendMessage} disabled={noAgent || noAgentSelected} />
             ) : (
               <div>
                 {messages.map((msg) => (
@@ -250,6 +249,16 @@ export function ChatView({ conversationId }: ChatViewProps) {
             {agentsError && (
               <div className="mb-2 rounded-md border border-term-red/20 bg-term-red/5 px-3 py-2 text-xs font-mono text-term-red">
                 Agent list failed to load: {agentsError}
+              </div>
+            )}
+            {noAgentSelected && (
+              <div className="mb-2 rounded-md border border-term-red/20 bg-term-red/5 px-3 py-2 text-xs font-mono text-term-red">
+                Agents loaded but none is selected. Pick one from the top-right selector.
+              </div>
+            )}
+            {noAgent && !agentsError && (
+              <div className="mb-2 rounded-md border border-term-red/20 bg-term-red/5 px-3 py-2 text-xs font-mono text-term-red">
+                No available agents. You can type, but sending will fail until agents are available.
               </div>
             )}
             <ChatInput
