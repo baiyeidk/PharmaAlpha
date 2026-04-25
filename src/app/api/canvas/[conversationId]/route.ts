@@ -2,6 +2,11 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { Prisma } from "@/generated/prisma/client";
+import { getProjectConversationAccess } from "@/lib/employee-investment";
+
+async function assertCanvasAccess(session: NonNullable<Awaited<ReturnType<typeof getSession>>>, conversationId: string) {
+  return getProjectConversationAccess(session, conversationId);
+}
 
 export async function GET(
   _req: Request,
@@ -14,10 +19,8 @@ export async function GET(
 
   const { conversationId } = await params;
 
-  const conversation = await prisma.conversation.findFirst({
-    where: { id: conversationId, userId: session.id },
-  });
-  if (!conversation) {
+  const access = await assertCanvasAccess(session, conversationId);
+  if (!access) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
@@ -65,10 +68,8 @@ export async function PUT(
 
   const { conversationId } = await params;
 
-  const conversation = await prisma.conversation.findFirst({
-    where: { id: conversationId, userId: session.id },
-  });
-  if (!conversation) {
+  const access = await assertCanvasAccess(session, conversationId);
+  if (!access) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
@@ -190,10 +191,8 @@ export async function POST(
 
   const { conversationId } = await params;
 
-  const conversation = await prisma.conversation.findFirst({
-    where: { id: conversationId, userId: session.id },
-  });
-  if (!conversation) {
+  const access = await assertCanvasAccess(session, conversationId);
+  if (!access) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

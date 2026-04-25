@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export interface SocialAccount {
   id: string;
@@ -160,7 +160,7 @@ export function useEmployeeInvestmentWorkbench() {
   const [latestResult, setLatestResult] = useState<WorkflowResultView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>("");
-  const [isPending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -300,12 +300,18 @@ export function useEmployeeInvestmentWorkbench() {
     [replaceWorkflow]
   );
 
-  const runAction = useCallback((action: () => Promise<unknown>) => {
-    startTransition(() => {
-      action().catch((err) => {
-        setError((err as Error).message || "Request failed");
-      });
-    });
+  const runAction = useCallback(async <T,>(action: () => Promise<T>): Promise<T> => {
+    setPending(true);
+    setError("");
+    try {
+      return await action();
+    } catch (err) {
+      const message = (err as Error).message || "Request failed";
+      setError(message);
+      throw err;
+    } finally {
+      setPending(false);
+    }
   }, []);
 
   const selectedWorkflow =
@@ -318,11 +324,11 @@ export function useEmployeeInvestmentWorkbench() {
     setSelectedWorkflowId,
     latestResult,
     loading,
-    pending: isPending,
+    pending,
     error,
     refresh,
     createWorkflow: (topic: string, selectedSkills: string[], selectedTeamMembers: string[]) =>
-      createWorkflow(topic, selectedSkills, selectedTeamMembers),
+      runAction(() => createWorkflow(topic, selectedSkills, selectedTeamMembers)),
     addNode: (draftId: string, input: AddNodeInput) => runAction(() => addNode(draftId, input)),
     updateNode: (draftId: string, nodeId: string, updates: Record<string, unknown>) =>
       runAction(() => updateNode(draftId, nodeId, updates)),

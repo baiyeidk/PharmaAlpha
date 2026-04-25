@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bot, Clock, HeartPulse, ImageIcon, FileText, Type, Plus } from "lucide-react";
+import { Bot, Clock, HeartPulse, ImageIcon, FileText, Type, Plus, Save } from "lucide-react";
 import { ChatMessage } from "./chat-message";
 import { ChatInput } from "./chat-input";
 import { WelcomeDashboard } from "./welcome-dashboard";
@@ -55,11 +55,23 @@ function timeAgo(dateStr: string): string {
 
 interface ChatViewProps {
   conversationId?: string;
+  projectId?: string;
+  onProjectArtifactSaved?: () => void;
 }
 
-export function ChatView({ conversationId }: ChatViewProps) {
+function artifactTitleFromMessage(content: string) {
+  const firstMeaningfulLine =
+    content
+      .split("\n")
+      .map((line) => line.replace(/^#+\s*/, "").trim())
+      .find(Boolean) ?? "Chat analysis";
+  return firstMeaningfulLine.slice(0, 80);
+}
+
+export function ChatView({ conversationId, projectId, onProjectArtifactSaved }: ChatViewProps) {
   const { agents, loading: agentsLoading, error: agentsError } = useAgents();
   const [selectedAgentId, setSelectedAgentId] = useState<string>("");
+  const [savingArtifactMessageId, setSavingArtifactMessageId] = useState<string>("");
   const addNodeAndSave = useCanvasStore((s) => s.addNodeAndSave);
   const loadFromServer = useCanvasStore((s) => s.loadFromServer);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -91,6 +103,37 @@ export function ChatView({ conversationId }: ChatViewProps) {
       loadFromServer(convId);
     }
   }, [loadFromServer]);
+
+  const handleSaveMessageAsArtifact = useCallback(
+    async (messageId: string, content: string) => {
+      if (!projectId || !content.trim()) return;
+      setSavingArtifactMessageId(messageId);
+      try {
+        const res = await fetch(`/api/employee-investment/projects/${projectId}/artifacts`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            artifactType: "chat_analysis",
+            title: artifactTitleFromMessage(content),
+            content,
+            metadata: {
+              source: "project_chat",
+              conversationId: activeConvIdRef.current,
+              messageId,
+            },
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data?.error || "Failed to save artifact");
+        }
+        onProjectArtifactSaved?.();
+      } finally {
+        setSavingArtifactMessageId("");
+      }
+    },
+    [onProjectArtifactSaved, projectId]
+  );
 
   const { messages, isLoading, sendMessage, stopGeneration } = useChatStream({
     agentId: effectiveAgentId,
@@ -239,7 +282,20 @@ export function ChatView({ conversationId }: ChatViewProps) {
             ) : (
               <div>
                 {messages.map((msg) => (
-                  <ChatMessage key={msg.id} role={msg.role} content={msg.content} isStreaming={msg.isStreaming} blocks={msg.blocks} />
+                  <div key={msg.id} className="group relative">
+                    <ChatMessage role={msg.role} content={msg.content} isStreaming={msg.isStreaming} blocks={msg.blocks} />
+                    {projectId && msg.role === "assistant" && !msg.isStreaming && msg.content.trim() && (
+                      <button
+                        type="button"
+                        className="absolute right-4 top-2 flex items-center gap-1 rounded-md border border-term-green/15 bg-term-bg-raised/90 px-2 py-1 font-mono text-[11px] text-muted-foreground opacity-0 shadow-sm transition-opacity hover:text-term-green group-hover:opacity-100"
+                        onClick={() => handleSaveMessageAsArtifact(msg.id, msg.content)}
+                        disabled={savingArtifactMessageId === msg.id}
+                      >
+                        <Save className="h-3 w-3" />
+                        {savingArtifactMessageId === msg.id ? "Saving" : "Save Artifact"}
+                      </button>
+                    )}
+                  </div>
                 ))}
               </div>
             )}
@@ -291,7 +347,7 @@ export function ChatView({ conversationId }: ChatViewProps) {
           style={{ width: `calc(${100 - splitPercent}% - 6px)` }}
           variant="subtle"
         >
-          <InfiniteCanvas conversationId={activeConvId!} />
+          <InfiniteCanvas conversationId={activeConvId!} projectId={projectId} />
         </MacWindow>
       )}
     </div>

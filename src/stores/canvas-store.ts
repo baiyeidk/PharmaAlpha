@@ -18,12 +18,14 @@ export interface CanvasNodeData extends Record<string, unknown> {
 
 interface CanvasState {
   conversationId: string | null;
+  projectId: string | null;
   nodes: Node<CanvasNodeData>[];
   edges: Edge[];
   loading: boolean;
   dirty: boolean;
 
   setConversation: (id: string | null) => void;
+  setProject: (id: string | null) => void;
   setNodes: (nodes: Node<CanvasNodeData>[]) => void;
   setEdges: (edges: Edge[]) => void;
   addNode: (node: Node<CanvasNodeData>) => void;
@@ -47,6 +49,7 @@ let pendingSave = false;
 
 export const useCanvasStore = create<CanvasState>((set, get) => ({
   conversationId: null,
+  projectId: null,
   nodes: [],
   edges: [],
   loading: false,
@@ -60,6 +63,10 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     }
     set({ conversationId: id, nodes: [], edges: [], loading: false, dirty: false });
     if (id) get().loadFromServer(id);
+  },
+
+  setProject: (id) => {
+    set({ projectId: id });
   },
 
   setNodes: (nodes) => {

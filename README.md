@@ -50,7 +50,8 @@ pnpm install
 
 # Set up environment
 cp .env.example .env
-# Edit .env with your PostgreSQL connection string
+# Edit .env with your PostgreSQL connection string and LLM API key.
+# Project skill/SOP execution uses DEEPSEEK_API_KEY or LLM_API_KEY.
 
 # Generate Prisma client
 pnpm exec prisma generate

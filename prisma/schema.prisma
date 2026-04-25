@@ -17,8 +17,8 @@ model User {
   image    String?
 
   employeeProfile EmployeeProfile?
-  conversations  Conversation[]
-  memoryNodes    MemoryNode[]
+  conversations   Conversation[]
+  memoryNodes     MemoryNode[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -44,20 +44,26 @@ model Agent {
 // ─── Chat Models ────────────────────────────────────────────
 
 model Conversation {
-  id     String  @id @default(cuid())
-  title  String?
-  userId String
+  id                  String  @id @default(cuid())
+  title               String?
+  userId              String
+  investmentProjectId String?
+  conversationType    String  @default("personal")
 
-  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages    Message[]
-  canvasNodes CanvasNode[]
-  canvasEdges CanvasEdge[]
-  files       ConversationFile[]
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  investmentProject    InvestmentProject? @relation(fields: [investmentProjectId], references: [id], onDelete: Cascade)
+  messages             Message[]
+  canvasNodes          CanvasNode[]
+  canvasEdges          CanvasEdge[]
+  files                ConversationFile[]
+  sourceWorkflowDrafts WorkflowDraft[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+  @@index([investmentProjectId])
+  @@index([conversationType])
 }
 
 model ConversationFile {
@@ -133,7 +139,7 @@ model Message {
 model SessionMemory {
   id        String   @id @default(cuid())
   userId    String
-  category  String   // "entity" | "conclusion"
+  category  String // "entity" | "conclusion"
   key       String
   value     String   @db.Text
   createdAt DateTime @default(now())
@@ -146,19 +152,19 @@ model SessionMemory {
 // ─── Memory Graph (cross-session structured memory) ─────────
 
 model MemoryNode {
-  id           String    @id @default(cuid())
+  id           String                       @id @default(cuid())
   userId       String
-  category     String    // "entity" | "conclusion" | "preference" | "event"
+  category     String // "entity" | "conclusion" | "preference" | "event"
   subject      String
   predicate    String?
-  object       String    @db.Text
-  confidence   Float     @default(1.0)
-  source       String?   // conversationId
+  object       String                       @db.Text
+  confidence   Float                        @default(1.0)
+  source       String? // conversationId
   embedding    Unsupported("vector(1024)")?
-  accessCount  Int       @default(0)
-  lastAccessAt DateTime  @default(now())
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  accessCount  Int                          @default(0)
+  lastAccessAt DateTime                     @default(now())
+  createdAt    DateTime                     @default(now())
+  updatedAt    DateTime                     @updatedAt
 
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   sourceEdges MemoryEdge[] @relation("SourceEdges")
@@ -185,14 +191,14 @@ model MemoryEdge {
 }
 
 model ConversationSummary {
-  id             String                     @id @default(cuid())
-  conversationId String                     @unique
+  id             String                       @id @default(cuid())
+  conversationId String                       @unique
   userId         String
-  summary        String                     @db.Text
+  summary        String                       @db.Text
   topics         String[]
   embedding      Unsupported("vector(1024)")?
-  createdAt      DateTime                   @default(now())
-  updatedAt      DateTime                   @updatedAt
+  createdAt      DateTime                     @default(now())
+  updatedAt      DateTime                     @updatedAt
 
   @@index([userId])
 }
@@ -203,7 +209,7 @@ model Document {
   id         String   @id @default(cuid())
   userId     String?
   title      String
-  sourceType String   // "pdf" | "web" | "manual"
+  sourceType String // "pdf" | "web" | "manual"
   sourceUrl  String?
   fileHash   String?  @unique
   status     String   @default("pending") // "pending" | "processing" | "ready" | "error"
@@ -219,13 +225,13 @@ model Document {
 }
 
 model DocumentChunk {
-  id         String                     @id @default(cuid())
+  id         String                       @id @default(cuid())
   documentId String
-  content    String                     @db.Text
+  content    String                       @db.Text
   metadata   Json?
   chunkIndex Int
   embedding  Unsupported("vector(1024)")?
-  createdAt  DateTime                   @default(now())
+  createdAt  DateTime                     @default(now())
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
@@ -235,14 +241,14 @@ model DocumentChunk {
 // ─── Task Models (reserved for async agent tasks) ───────────
 
 model Task {
-  id       String @id @default(cuid())
-  type     String
-  status   String @default("pending")
-  input    Json?
-  output   Json?
-  error    String?
-  agentId  String?
-  userId   String?
+  id      String  @id @default(cuid())
+  type    String
+  status  String  @default("pending")
+  input   Json?
+  output  Json?
+  error   String?
+  agentId String?
+  userId  String?
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -265,15 +271,16 @@ model EmployeeProfile {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  user                User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
   socialAccounts      EmployeeSocialAccount[]
   observations        EmployeeObservation[]
   investmentBehaviors EmployeeInvestmentBehavior[]
   skills              SkillDefinition[]
-  initiatedProjects   InvestmentProject[]       @relation("ProjectInitiator")
+  initiatedProjects   InvestmentProject[]          @relation("ProjectInitiator")
   projectMemberships  InvestmentProjectMember[]
   workflowDrafts      WorkflowDraft[]
   workflowExecutions  WorkflowExecution[]
+  createdArtifacts    ProjectArtifact[]            @relation("CreatedProjectArtifacts")
 }
 
 model EmployeeSocialAccount {
@@ -289,8 +296,8 @@ model EmployeeSocialAccount {
 
   employeeProfile EmployeeProfile @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
 
-  @@index([employeeProfileId])
   @@unique([employeeProfileId, platform, accountRef])
+  @@index([employeeProfileId])
 }
 
 model EmployeeObservation {
@@ -342,13 +349,15 @@ model SkillDefinition {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  employeeProfile EmployeeProfile @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
-  scripts         SkillScript[]
-  sops            SkillSop[]
-  workflowNodes   WorkflowNode[]
+  employeeProfile  EmployeeProfile   @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  scripts          SkillScript[]
+  sops             SkillSop[]
+  workflowNodes    WorkflowNode[]
+  workflowDrafts   WorkflowDraft[]
+  projectArtifacts ProjectArtifact[]
 
-  @@index([employeeProfileId])
   @@unique([employeeProfileId, name])
+  @@index([employeeProfileId])
 }
 
 model SkillScript {
@@ -368,8 +377,8 @@ model SkillScript {
 
   skillDefinition SkillDefinition @relation(fields: [skillDefinitionId], references: [id], onDelete: Cascade)
 
-  @@index([skillDefinitionId])
   @@unique([skillDefinitionId, name, version])
+  @@index([skillDefinitionId])
 }
 
 model SkillSop {
@@ -382,32 +391,46 @@ model SkillSop {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  skillDefinition SkillDefinition @relation(fields: [skillDefinitionId], references: [id], onDelete: Cascade)
-  workflowNodes   WorkflowNode[]
+  skillDefinition  SkillDefinition   @relation(fields: [skillDefinitionId], references: [id], onDelete: Cascade)
+  workflowNodes    WorkflowNode[]
+  workflowDrafts   WorkflowDraft[]
+  projectArtifacts ProjectArtifact[]
 
-  @@index([skillDefinitionId])
   @@unique([skillDefinitionId, name])
+  @@index([skillDefinitionId])
 }
 
 model WorkflowDraft {
-  id                String   @id @default(cuid())
-  employeeProfileId String
-  investmentProjectId String?
-  topic             String   @db.Text
-  status            String   @default("draft")
-  selectedSkills    Json?
-  config            Json?
-  confirmedAt       DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                   String    @id @default(cuid())
+  employeeProfileId    String
+  investmentProjectId  String?
+  skillDefinitionId    String?
+  skillSopId           String?
+  sourceConversationId String?
+  sessionType          String    @default("legacy_workflow")
+  topic                String    @db.Text
+  status               String    @default("draft")
+  selectedSkills       Json?
+  config               Json?
+  confirmedAt          DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  employeeProfile   EmployeeProfile    @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
-  investmentProject InvestmentProject? @relation(fields: [investmentProjectId], references: [id], onDelete: SetNull)
-  nodes             WorkflowNode[]
-  executions        WorkflowExecution[]
+  employeeProfile    EmployeeProfile     @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  investmentProject  InvestmentProject?  @relation(fields: [investmentProjectId], references: [id], onDelete: SetNull)
+  skillDefinition    SkillDefinition?    @relation(fields: [skillDefinitionId], references: [id], onDelete: SetNull)
+  skillSop           SkillSop?           @relation(fields: [skillSopId], references: [id], onDelete: SetNull)
+  sourceConversation Conversation?       @relation(fields: [sourceConversationId], references: [id], onDelete: SetNull)
+  nodes              WorkflowNode[]
+  executions         WorkflowExecution[]
+  projectArtifacts   ProjectArtifact[]
 
   @@index([employeeProfileId])
   @@index([investmentProjectId])
+  @@index([skillDefinitionId])
+  @@index([skillSopId])
+  @@index([sourceConversationId])
+  @@index([sessionType])
   @@index([status])
 }
 
@@ -427,38 +450,41 @@ model WorkflowNode {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  workflowDraft       WorkflowDraft            @relation(fields: [workflowDraftId], references: [id], onDelete: Cascade)
-  skillDefinition     SkillDefinition?         @relation(fields: [skillDefinitionId], references: [id], onDelete: SetNull)
-  skillSop            SkillSop?                @relation(fields: [skillSopId], references: [id], onDelete: SetNull)
-  nodeRuns            WorkflowNodeRun[]
-  currentExecutions   WorkflowExecution[]      @relation("ExecutionCurrentNode")
-  executionEvents     WorkflowExecutionEvent[]
+  workflowDraft     WorkflowDraft            @relation(fields: [workflowDraftId], references: [id], onDelete: Cascade)
+  skillDefinition   SkillDefinition?         @relation(fields: [skillDefinitionId], references: [id], onDelete: SetNull)
+  skillSop          SkillSop?                @relation(fields: [skillSopId], references: [id], onDelete: SetNull)
+  nodeRuns          WorkflowNodeRun[]
+  currentExecutions WorkflowExecution[]      @relation("ExecutionCurrentNode")
+  executionEvents   WorkflowExecutionEvent[]
 
+  @@unique([workflowDraftId, nodeKey])
   @@index([workflowDraftId])
   @@index([nodeType])
   @@index([skillDefinitionId])
   @@index([skillSopId])
-  @@unique([workflowDraftId, nodeKey])
 }
 
 model WorkflowExecution {
-  id                String   @id @default(cuid())
-  workflowDraftId   String
-  employeeProfileId String
+  id                    String    @id @default(cuid())
+  workflowDraftId       String
+  employeeProfileId     String
   currentWorkflowNodeId String?
-  status            String   @default("pending")
-  summary           String?  @db.Text
-  metadata          Json?
-  startedAt         DateTime?
-  finishedAt        DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  status                String    @default("pending")
+  summary               String?   @db.Text
+  inputArtifactIds      Json?
+  executionContext      Json?
+  metadata              Json?
+  startedAt             DateTime?
+  finishedAt            DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
-  workflowDraft      WorkflowDraft         @relation(fields: [workflowDraftId], references: [id], onDelete: Cascade)
-  employeeProfile    EmployeeProfile       @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
-  currentWorkflowNode WorkflowNode?        @relation("ExecutionCurrentNode", fields: [currentWorkflowNodeId], references: [id], onDelete: SetNull)
-  nodeRuns           WorkflowNodeRun[]
-  events             WorkflowExecutionEvent[]
+  workflowDraft       WorkflowDraft            @relation(fields: [workflowDraftId], references: [id], onDelete: Cascade)
+  employeeProfile     EmployeeProfile          @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  currentWorkflowNode WorkflowNode?            @relation("ExecutionCurrentNode", fields: [currentWorkflowNodeId], references: [id], onDelete: SetNull)
+  nodeRuns            WorkflowNodeRun[]
+  events              WorkflowExecutionEvent[]
+  projectArtifacts    ProjectArtifact[]
 
   @@index([workflowDraftId])
   @@index([employeeProfileId])
@@ -467,17 +493,17 @@ model WorkflowExecution {
 }
 
 model WorkflowNodeRun {
-  id                  String   @id @default(cuid())
+  id                  String    @id @default(cuid())
   workflowExecutionId String
   workflowNodeId      String
-  status              String   @default("pending")
+  status              String    @default("pending")
   input               Json?
   output              Json?
-  error               String?  @db.Text
+  error               String?   @db.Text
   startedAt           DateTime?
   finishedAt          DateTime?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   workflowExecution WorkflowExecution @relation(fields: [workflowExecutionId], references: [id], onDelete: Cascade)
   workflowNode      WorkflowNode      @relation(fields: [workflowNodeId], references: [id], onDelete: Cascade)
@@ -488,44 +514,79 @@ model WorkflowNodeRun {
 }
 
 model InvestmentProject {
-  id                 String   @id @default(cuid())
-  employeeProfileId  String
-  projectCode        String   @unique
-  title              String
-  topic              String   @db.Text
-  status             String   @default("draft")
-  objective          String?  @db.Text
-  priority           String?
-  config             Json?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                String   @id @default(cuid())
+  employeeProfileId String
+  projectCode       String   @unique
+  title             String
+  topic             String   @db.Text
+  status            String   @default("draft")
+  objective         String?  @db.Text
+  priority          String?
+  config            Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  initiator      EmployeeProfile          @relation("ProjectInitiator", fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  initiator      EmployeeProfile           @relation("ProjectInitiator", fields: [employeeProfileId], references: [id], onDelete: Cascade)
   members        InvestmentProjectMember[]
   workflowDrafts WorkflowDraft[]
+  conversations  Conversation[]
+  artifacts      ProjectArtifact[]
 
   @@index([employeeProfileId])
   @@index([status])
 }
 
+model ProjectArtifact {
+  id                         String   @id @default(cuid())
+  investmentProjectId        String
+  createdByEmployeeProfileId String
+  workflowDraftId            String?
+  workflowExecutionId        String?
+  skillDefinitionId          String?
+  skillSopId                 String?
+  artifactType               String
+  title                      String
+  content                    String   @db.Text
+  attachments                Json?
+  inputArtifactIds           Json?
+  metadata                   Json?
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  investmentProject        InvestmentProject  @relation(fields: [investmentProjectId], references: [id], onDelete: Cascade)
+  createdByEmployeeProfile EmployeeProfile    @relation("CreatedProjectArtifacts", fields: [createdByEmployeeProfileId], references: [id], onDelete: Cascade)
+  workflowDraft            WorkflowDraft?     @relation(fields: [workflowDraftId], references: [id], onDelete: SetNull)
+  workflowExecution        WorkflowExecution? @relation(fields: [workflowExecutionId], references: [id], onDelete: SetNull)
+  skillDefinition          SkillDefinition?   @relation(fields: [skillDefinitionId], references: [id], onDelete: SetNull)
+  skillSop                 SkillSop?          @relation(fields: [skillSopId], references: [id], onDelete: SetNull)
+
+  @@index([investmentProjectId])
+  @@index([createdByEmployeeProfileId])
+  @@index([workflowDraftId])
+  @@index([workflowExecutionId])
+  @@index([skillDefinitionId])
+  @@index([skillSopId])
+  @@index([artifactType])
+}
+
 model InvestmentProjectMember {
-  id                 String   @id @default(cuid())
+  id                  String   @id @default(cuid())
   investmentProjectId String
-  employeeProfileId  String
-  role               String
-  isInitiator        Boolean  @default(false)
-  status             String   @default("active")
-  metadata           Json?
-  joinedAt           DateTime @default(now())
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  employeeProfileId   String
+  role                String
+  isInitiator         Boolean  @default(false)
+  status              String   @default("active")
+  metadata            Json?
+  joinedAt            DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   investmentProject InvestmentProject @relation(fields: [investmentProjectId], references: [id], onDelete: Cascade)
   employeeProfile   EmployeeProfile   @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
 
+  @@unique([investmentProjectId, employeeProfileId])
   @@index([investmentProjectId])
   @@index([employeeProfileId])
-  @@unique([investmentProjectId, employeeProfileId])
 }
 
 model WorkflowExecutionEvent {

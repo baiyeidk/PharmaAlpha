@@ -39,20 +39,27 @@ const nodeTypes: NodeTypes = {
 
 interface InfiniteCanvasProps {
   conversationId: string;
+  projectId?: string;
 }
 
-function useCanvasActions(conversationId: string) {
+function useCanvasActions(conversationId: string, projectId?: string) {
   const {
     nodes,
     edges,
     loading,
     setConversation,
+    setProject,
     setNodes,
     setEdges,
     addNode,
   } = useCanvasStore();
 
   const prevConvRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    setProject(projectId ?? null);
+    return () => setProject(null);
+  }, [projectId, setProject]);
 
   useEffect(() => {
     if (conversationId !== prevConvRef.current) {
@@ -95,8 +102,11 @@ function useCanvasActions(conversationId: string) {
   return { nodes, edges, loading, setNodes, setEdges, handleAdd };
 }
 
-function CanvasInner({ conversationId }: InfiniteCanvasProps) {
-  const { nodes, edges, loading, setNodes, setEdges, handleAdd } = useCanvasActions(conversationId);
+function CanvasInner({ conversationId, projectId }: InfiniteCanvasProps) {
+  const { nodes, edges, loading, setNodes, setEdges, handleAdd } = useCanvasActions(
+    conversationId,
+    projectId
+  );
   const { fitView } = useReactFlow();
   const prevCountRef = useRef(nodes.length);
 
@@ -233,10 +243,10 @@ function CanvasInner({ conversationId }: InfiniteCanvasProps) {
   );
 }
 
-export function InfiniteCanvas({ conversationId }: InfiniteCanvasProps) {
+export function InfiniteCanvas({ conversationId, projectId }: InfiniteCanvasProps) {
   return (
     <ReactFlowProvider>
-      <CanvasInner conversationId={conversationId} />
+      <CanvasInner conversationId={conversationId} projectId={projectId} />
     </ReactFlowProvider>
   );
 }

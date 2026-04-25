@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { executeAgent, sseEncoder, sseHeaders, getAgentById } from "@/lib/agents";
-import { ensureEmployeeContext } from "@/lib/employee-investment";
+import { ensureEmployeeContext, getProjectConversationAccess } from "@/lib/employee-investment";
 import type { AgentOutputChunk } from "@/lib/agents";
 import { executeCanvasTool } from "@/lib/agents/canvas-tools";
 import { getCanvasSystemMessage, getCanvasToolsForLLM } from "@/lib/agents/tool-definitions";
@@ -23,6 +23,76 @@ async function loadHistoryFromDB(conversationId: string) {
     select: { role: true, content: true },
   });
   return rows.reverse().map((r) => ({ role: r.role, content: r.content }));
+}
+
+type ProjectConversationAccess = NonNullable<
+  Awaited<ReturnType<typeof getProjectConversationAccess>>
+>;
+
+async function buildProjectContextMessage(access: ProjectConversationAccess) {
+  const projectId = access.conversation.investmentProjectId;
+  if (!projectId) return null;
+
+  const project = await prisma.investmentProject.findUnique({
+    where: { id: projectId },
+    include: {
+      members: {
+        where: { status: "active" },
+        orderBy: [{ isInitiator: "desc" }, { joinedAt: "asc" }],
+        include: {
+          employeeProfile: {
+            select: {
+              employeeCode: true,
+              displayName: true,
+              title: true,
+              department: true,
+            },
+          },
+        },
+      },
+      artifacts: {
+        orderBy: { updatedAt: "desc" },
+        take: 12,
+        select: {
+          id: true,
+          artifactType: true,
+          title: true,
+          content: true,
+          updatedAt: true,
+        },
+      },
+    },
+  });
+
+  if (!project) return null;
+
+  const members = project.members
+    .map((member) => {
+      const employee = member.employeeProfile;
+      return `${employee.displayName}(${employee.employeeCode}, ${employee.title}, ${employee.department})`;
+    })
+    .join("; ");
+  const artifacts = project.artifacts
+    .map((artifact) => {
+      const content = artifact.content.replace(/\s+/g, " ").slice(0, 800);
+      return `- ${artifact.title} [${artifact.artifactType}, ${artifact.id}, ${artifact.updatedAt.toISOString()}]: ${content}`;
+    })
+    .join("\n");
+
+  return [
+    "[Project Context]",
+    `Project ID: ${project.id}`,
+    `Project Code: ${project.projectCode}`,
+    `Title: ${project.title}`,
+    `Topic: ${project.topic}`,
+    project.objective ? `Objective: ${project.objective}` : null,
+    project.priority ? `Priority: ${project.priority}` : null,
+    members ? `Members: ${members}` : "Members: none",
+    artifacts ? `Recent Artifacts:\n${artifacts}` : "Recent Artifacts: none",
+    "Instruction: Treat project artifacts as durable project context. When producing reusable conclusions, name the artifact that should be saved or updated.",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 // ── LLM-based Memory Extraction ──────────────────────────────
@@ -202,9 +272,15 @@ export async function POST(req: Request) {
   const isServerLoad = typeof body.newMessage === "string";
   let messages: Array<{ role: string; content: string }>;
   let convId: string | undefined = body.conversationId;
+  let conversationAccess: Awaited<ReturnType<typeof getProjectConversationAccess>> | null = null;
 
   if (isServerLoad) {
     if (convId) {
+      const access = await getProjectConversationAccess(session, convId);
+      if (!access) {
+        return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
+      }
+      conversationAccess = access;
       messages = await loadHistoryFromDB(convId);
     } else {
       messages = [];
@@ -217,6 +293,13 @@ export async function POST(req: Request) {
         { error: "messages or newMessage is required" },
         { status: 400 }
       );
+    }
+    if (convId) {
+      const access = await getProjectConversationAccess(session, convId);
+      if (!access) {
+        return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
+      }
+      conversationAccess = access;
     }
   }
 
@@ -257,19 +340,32 @@ export async function POST(req: Request) {
   }
 
   const isPECAgent = agent.name === "supervisor_agent";
+  const projectContextMessage =
+    agent.name === "employee_investment_team" && conversationAccess?.conversation.investmentProjectId
+      ? await buildProjectContextMessage(conversationAccess)
+      : null;
 
   const agentMessages = isPECAgent
     ? [...messages]
-    : [{ role: "system", content: getCanvasSystemMessage() }, ...messages];
+    : [
+        { role: "system", content: getCanvasSystemMessage() },
+        ...(projectContextMessage ? [{ role: "system", content: projectContextMessage }] : []),
+        ...messages,
+      ];
 
   const employeeContext =
     agent.name === "employee_investment_team"
       ? await ensureEmployeeContext(session)
       : null;
 
-  let agentParams: Record<string, unknown> = {};
+  const agentParams: Record<string, unknown> = {};
   if (employeeContext) {
     agentParams.employee_id = employeeContext.employeeCode;
+  }
+  const projectAccess = conversationAccess?.projectAccess;
+  if (projectContextMessage && projectAccess?.project) {
+    agentParams.project_id = projectAccess.project.id;
+    agentParams.project_code = projectAccess.project.projectCode;
   }
 
   if (isPECAgent && convId) {

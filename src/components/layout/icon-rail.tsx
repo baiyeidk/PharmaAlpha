@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/chat", label: "Chat", icon: MessageSquare, code: "01" },
-  { href: "/investment-team", label: "Investment", icon: BriefcaseBusiness, code: "02" },
+  { href: "/investment-team/projects", label: "Investment", icon: BriefcaseBusiness, code: "02" },
   { href: "/agents", label: "Agents", icon: Bot, code: "03" },
   { href: "/settings", label: "Settings", icon: Settings, code: "04" },
 ];

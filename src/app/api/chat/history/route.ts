@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { getProjectConversationAccess } from "@/lib/employee-investment";
 
 export async function GET(req: Request) {
   const session = await getSession();
@@ -12,8 +13,13 @@ export async function GET(req: Request) {
   const conversationId = searchParams.get("conversationId");
 
   if (conversationId) {
+    const access = await getProjectConversationAccess(session, conversationId);
+    if (!access) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
     const conversation = await prisma.conversation.findFirst({
-      where: { id: conversationId, userId: session.id },
+      where: { id: conversationId },
       include: {
         messages: {
           orderBy: { createdAt: "asc" },
@@ -21,10 +27,6 @@ export async function GET(req: Request) {
         },
       },
     });
-
-    if (!conversation) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
 
     return NextResponse.json(conversation);
   }

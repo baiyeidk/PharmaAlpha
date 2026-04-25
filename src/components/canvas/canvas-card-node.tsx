@@ -14,6 +14,7 @@ import {
   Loader2,
   Pencil,
   Eye,
+  Save,
 } from "lucide-react";
 import { StockChart } from "@/components/ui/stock-chart";
 import { ECGCanvas } from "@/components/ui/ecg-canvas";
@@ -330,12 +331,49 @@ function TextBody({ data, nodeId }: { data: CanvasNodeData; nodeId: string }) {
 function CanvasCardNodeInner({ data, id }: NodeProps) {
   const nodeData = data as unknown as CanvasNodeData;
   const removeNode = useCanvasStore((s) => s.removeNode);
+  const projectId = useCanvasStore((s) => s.projectId);
+  const [savingArtifact, setSavingArtifact] = useState(false);
   const config = typeConfig[nodeData.nodeType] || typeConfig.text;
   const Icon = config.icon;
 
   const handleRemove = useCallback(() => {
     removeNode(id);
   }, [removeNode, id]);
+
+  const handleSaveArtifact = useCallback(async () => {
+    if (!projectId || savingArtifact) return;
+    const content = buildArtifactContentFromNode(nodeData);
+    if (!content.trim()) return;
+
+    setSavingArtifact(true);
+    try {
+      const res = await fetch(`/api/employee-investment/projects/${projectId}/artifacts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          artifactType: `canvas_${nodeData.nodeType}`,
+          title: nodeData.label || config.label,
+          content,
+          metadata: {
+            source: "canvas",
+            canvasNodeId: id,
+            nodeType: nodeData.nodeType,
+          },
+        }),
+      });
+      if (!res.ok) {
+        console.warn("[canvas] save artifact failed:", res.status);
+      } else {
+        window.dispatchEvent(
+          new CustomEvent("employee-investment:artifact-created", {
+            detail: { projectId },
+          })
+        );
+      }
+    } finally {
+      setSavingArtifact(false);
+    }
+  }, [config.label, id, nodeData, projectId, savingArtifact]);
 
   return (
     <div className="flex flex-col h-full rounded-lg bg-term-bg-raised/90 backdrop-blur-xl border border-term-green/10 shadow-[0_2px_8px_rgba(0,0,0,0.2)] overflow-hidden group">
@@ -351,6 +389,20 @@ function CanvasCardNodeInner({ data, id }: NodeProps) {
         <span className="text-[10px] font-mono text-term-green-dim truncate flex-1">
           {nodeData.label || config.label}
         </span>
+        {projectId && (
+          <button
+            onClick={handleSaveArtifact}
+            className="nodrag h-4 w-4 flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 hover:bg-term-green/10 transition-opacity"
+            title="Save as project artifact"
+            disabled={savingArtifact}
+          >
+            {savingArtifact ? (
+              <Loader2 className="h-2.5 w-2.5 animate-spin text-term-green/70" />
+            ) : (
+              <Save className="h-2.5 w-2.5 text-term-green/70" />
+            )}
+          </button>
+        )}
         <button
           onClick={handleRemove}
           className="nodrag h-4 w-4 flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 hover:bg-term-red/10 transition-opacity"
@@ -374,6 +426,41 @@ function CanvasCardNodeInner({ data, id }: NodeProps) {
       <Handle type="source" position={Position.Right} className="!w-3 !h-3 !bg-term-green/40 !border-2 !border-term-bg hover:!bg-term-green !transition-colors" />
     </div>
   );
+}
+
+function buildArtifactContentFromNode(nodeData: CanvasNodeData) {
+  const title = nodeData.label || "Canvas node";
+
+  if (nodeData.nodeType === "text") {
+    return nodeData.content ? `# ${title}\n\n${nodeData.content}` : "";
+  }
+
+  if (nodeData.nodeType === "chart") {
+    const tickers = nodeData.tickers?.length ? nodeData.tickers.join(", ") : "none";
+    return [
+      `# ${title}`,
+      "",
+      `Type: chart`,
+      `Tickers: ${tickers}`,
+      nodeData.description ? `Description: ${nodeData.description}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  if (nodeData.nodeType === "image" || nodeData.nodeType === "pdf") {
+    return [
+      `# ${title}`,
+      "",
+      `Type: ${nodeData.nodeType}`,
+      nodeData.url ? `URL: ${nodeData.url}` : null,
+      nodeData.description ? `Description: ${nodeData.description}` : null,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  return `# ${title}`;
 }
 
 export const CanvasCardNode = memo(CanvasCardNodeInner);

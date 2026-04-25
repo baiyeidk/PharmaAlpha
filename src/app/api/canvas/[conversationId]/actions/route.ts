@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { Prisma } from "@/generated/prisma/client";
+import { getProjectConversationAccess } from "@/lib/employee-investment";
 
 const INTERNAL_API_KEY = process.env.AGENT_API_KEY || "pharma-agent-internal-key";
 
@@ -17,8 +18,8 @@ async function authenticate(req: Request, conversationId: string) {
 
   const session = await getSession();
   if (!session) return { ok: false as const, error: "Unauthorized" };
-  const conv = await prisma.conversation.findFirst({ where: { id: conversationId, userId: session.id } });
-  return conv ? { ok: true as const } : { ok: false as const, error: "Not found" };
+  const access = await getProjectConversationAccess(session, conversationId);
+  return access ? { ok: true as const } : { ok: false as const, error: "Not found" };
 }
 
 export async function POST(
