@@ -18,6 +18,7 @@ const LOOKBACK_MULTIPLIER: Record<string, number> = {
 };
 
 const sdk = new StockSDK();
+type Market = "a" | "hk" | "us";
 
 interface SinaKline {
   day: string;
@@ -39,10 +40,23 @@ interface SdkKline {
   changePercent?: number | null;
 }
 
-function normalizeCode(code: string): string {
+function detectMarket(code: string): Market {
   const trimmed = code.trim();
-  const m = trimmed.match(/^(?:sh|sz|bj)(\d{6})$/i);
-  return m ? m[1] : trimmed;
+  if (/^(?:sh|sz|bj)\d{6}$/i.test(trimmed) || /^\d{6}$/.test(trimmed)) return "a";
+  if (/^\d{4,5}$/.test(trimmed) || /^\d{5}\.HK$/i.test(trimmed)) return "hk";
+  return "us";
+}
+
+function normalizeCode(code: string, market: Market): string {
+  const trimmed = code.trim();
+  if (market === "a") {
+    const m = trimmed.match(/^(?:sh|sz|bj)(\d{6})$/i);
+    return m ? m[1] : trimmed;
+  }
+  if (market === "hk") {
+    return trimmed.replace(/\.HK$/i, "").padStart(5, "0");
+  }
+  return trimmed.toUpperCase().replace(/\.US$/i, "");
 }
 
 function compactDateFromOffset(daysAgo: number): string {
@@ -92,16 +106,18 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Missing code parameter" }, { status: 400 });
   }
 
-  const normalizedCode = normalizeCode(code);
+  const market = detectMarket(code);
+  const normalizedCode = normalizeCode(code, market);
   const sdkPeriod = PERIOD_MAP[period] ?? "daily";
 
   try {
     const lookbackDays = Math.max(days * (LOOKBACK_MULTIPLIER[sdkPeriod] ?? 2), 60);
     const startDate = compactDateFromOffset(lookbackDays);
-    const raw = await sdk.getHistoryKline(normalizedCode, {
-      period: sdkPeriod,
-      startDate,
-    });
+    const raw = market === "a"
+      ? await sdk.getHistoryKline(normalizedCode, { period: sdkPeriod, startDate })
+      : market === "hk"
+        ? await sdk.getHKHistoryKline(normalizedCode, { period: sdkPeriod, startDate })
+        : await sdk.getUSHistoryKline(normalizedCode, { period: sdkPeriod, startDate });
 
     if (Array.isArray(raw) && raw.length > 0) {
       const klines = mapSdkKlines(raw as SdkKline[], days).filter((x) => x.date);
@@ -116,7 +132,7 @@ export async function GET(req: Request) {
   }
 
   let symbol = normalizedCode;
-  if (/^\d{6}$/.test(normalizedCode)) {
+  if (market === "a" && /^\d{6}$/.test(normalizedCode)) {
     symbol = normalizedCode.startsWith("6") || normalizedCode.startsWith("9") || normalizedCode.startsWith("5")
       ? `sh${normalizedCode}`
       : `sz${normalizedCode}`;

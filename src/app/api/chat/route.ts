@@ -424,6 +424,7 @@ export async function POST(req: Request) {
   );
 
   const chunks: string[] = [];
+  let lastErrorContent: string | null = null;
 
   const captureAndForward = new TransformStream<AgentOutputChunk, AgentOutputChunk>({
     async transform(chunk, controller) {
@@ -446,20 +447,24 @@ export async function POST(req: Request) {
       if ((chunk.type === "chunk" || chunk.type === "result") && chunk.content) {
         chunks.push(chunk.content);
       }
+      if (chunk.type === "error" && chunk.content) {
+        lastErrorContent = chunk.content;
+      }
       controller.enqueue({ ...chunk, metadata: { ...chunk.metadata, conversationId: convId } });
     },
     async flush() {
       const fullContent = chunks.join("");
-      if (fullContent) {
+      if (fullContent || lastErrorContent) {
+        const persistedContent = fullContent || `Error: ${lastErrorContent}`;
         await prisma.message.create({
           data: {
             role: "assistant",
-            content: fullContent,
+            content: persistedContent,
             conversationId: convId!,
             agentId: agent.id,
           },
         });
-        if (isPECAgent) {
+        if (isPECAgent && fullContent) {
           extractMemoryWithLLM(fullContent, session!.id, convId!).catch((err) => {
             console.warn("Async memory extraction failed:", err);
           });

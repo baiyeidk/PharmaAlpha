@@ -93,6 +93,38 @@ class PECAgent(BaseAgent):
 
     # ── LLM call helpers ────────────────────────────────────
 
+    @staticmethod
+    def _normalize_llm_json_content(content: str) -> dict[str, Any]:
+        """Parse model JSON output robustly, including quoted-JSON edge cases."""
+        raw = (content or "").strip()
+        if not raw:
+            return {}
+
+        cleaned = raw
+        if cleaned.startswith("```"):
+            cleaned = cleaned.replace("```json", "").replace("```", "").strip()
+
+        try:
+            parsed: Any = json.loads(cleaned)
+        except json.JSONDecodeError:
+            return {"error": "Invalid JSON from LLM", "raw": raw}
+
+        # Some models return a JSON-string that itself contains JSON text.
+        if isinstance(parsed, str):
+            nested = parsed.strip()
+            try:
+                nested_obj = json.loads(nested)
+                if isinstance(nested_obj, dict):
+                    return nested_obj
+                return {"error": "LLM returned non-object JSON payload", "raw": raw}
+            except json.JSONDecodeError:
+                return {"error": "LLM returned quoted non-JSON string", "raw": raw}
+
+        if isinstance(parsed, dict):
+            return parsed
+
+        return {"error": "LLM returned non-object JSON payload", "raw": raw}
+
     def _call_llm_json(
         self, system_prompt: str, messages: list[dict[str, Any]], flog: _LLMFileLogger, phase: str, round_i: int,
     ) -> dict[str, Any]:
@@ -121,10 +153,7 @@ class PECAgent(BaseAgent):
         _log(f"PECAgent {phase} done in {elapsed:.1f}s | len={len(content)}")
         flog.log_response(round_i, content, [], elapsed)
 
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            return {"error": "Invalid JSON from LLM", "raw": content}
+        return self._normalize_llm_json_content(content)
 
     def _run_tool_loop(
         self, system_prompt: str, messages: list[dict[str, Any]],
@@ -215,6 +244,8 @@ class PECAgent(BaseAgent):
                 _log(f"PECAgent {phase} tool done: {fn_name} in {tool_elapsed:.1f}s | ok={success}")
                 flog.log_tool_exec(round_i, fn_name, fn_args, result_str, success, tool_elapsed)
                 yield AgentToolResult(name=fn_name, result=result_str, success=success)
+                status_text = "OK" if success else "ERROR"
+                collected_all_text += f"\n[TOOL:{status_text}] {fn_name}\n{result_str}\n"
 
                 if success and fn_name.startswith("canvas_"):
                     entry = {"tool": fn_name, "label": fn_args.get("label", "")}
