@@ -28,10 +28,25 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      data-theme="dark"
       className={`${interSans.variable} ${jetbrainsMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <body className="h-full">
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(() => {
+              try {
+                const key = 'pharmaalpha-theme';
+                const saved = localStorage.getItem(key);
+                const theme = saved === 'light' || saved === 'dark' ? saved : 'dark';
+                document.documentElement.setAttribute('data-theme', theme);
+              } catch {
+                document.documentElement.setAttribute('data-theme', 'dark');
+              }
+            })();`,
+          }}
+        />
         <Providers>{children}</Providers>
       </body>
     </html>

@@ -34,7 +34,14 @@ class _LLMFileLogger:
     def __init__(self, agent_label: str, session_id: str) -> None:
         _LOGS_DIR.mkdir(parents=True, exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{ts}_{agent_label}_{session_id[:8]}.jsonl"
+        self._user_id = (
+            os.environ.get("AGENT_USER_ID")
+            or os.environ.get("MEMORY_USER_ID")
+            or "unknown"
+        )
+        self._user_email = os.environ.get("AGENT_USER_EMAIL") or ""
+        user_tag = self._user_id.replace("/", "_").replace("\\", "_")[:8] or "unknown"
+        filename = f"{ts}_{agent_label}_{session_id[:8]}_{user_tag}.jsonl"
         self._path = _LOGS_DIR / filename
         self._fh: Optional[TextIO] = None
         self._verbose = os.environ.get("AGENT_LOG_VERBOSE", "").lower() in {"1", "true", "yes", "on"}
@@ -79,6 +86,8 @@ class _LLMFileLogger:
 
     def _write(self, record: dict[str, Any]) -> None:
         record["_ts"] = datetime.now().isoformat()
+        record["user_id"] = self._user_id
+        record["user_email"] = self._user_email
         fh = self._ensure_open()
         fh.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
         fh.flush()

@@ -397,6 +397,9 @@ export async function POST(req: Request) {
     MEMORY_USER_ID: session.id,
     AGENT_USER_ID: session.id,
   };
+  if (session.email) {
+    agentExtraEnv.AGENT_USER_EMAIL = session.email;
+  }
   if (llmConfig.apiKey) {
     agentExtraEnv.LLM_API_KEY = llmConfig.apiKey;
     agentExtraEnv.DEEPSEEK_API_KEY = llmConfig.apiKey;

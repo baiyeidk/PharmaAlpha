@@ -39,6 +39,9 @@ export async function invokeEmployeeInvestmentAgent<T = Record<string, unknown>>
     AGENT_USER_ID: session.id,
     MEMORY_USER_ID: session.id,
   };
+  if (session.email) {
+    extraEnv.AGENT_USER_EMAIL = session.email;
+  }
   if (llmConfig.apiKey) {
     extraEnv.LLM_API_KEY = llmConfig.apiKey;
     extraEnv.DEEPSEEK_API_KEY = llmConfig.apiKey;
