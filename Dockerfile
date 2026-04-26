@@ -22,7 +22,7 @@ RUN npm install --registry https://registry.npmmirror.com
 
 # Copy source
 COPY . .
-RUN chmod +x scripts/docker-entrypoint.sh
+RUN sed -i 's/\r$//' scripts/docker-entrypoint.sh && chmod +x scripts/docker-entrypoint.sh
 
 # Generate Prisma client
 RUN npx prisma generate
@@ -33,7 +33,10 @@ RUN npm run build
 ENV PATH="/app/.venv/bin:$PATH"
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV RUN_PROJECT_FIRST_SEED=true
 
 EXPOSE 3000
 
-CMD ["scripts/docker-entrypoint.sh"]
+# Database schema sync and optional demo seed are runtime concerns because the
+# database may be managed by docker compose or by an external deployment.
+CMD ["sh", "scripts/docker-entrypoint.sh"]

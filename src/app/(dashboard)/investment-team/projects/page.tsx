@@ -328,6 +328,10 @@ export default function InvestmentProjectsPage() {
               <RefreshCcw className="h-3.5 w-3.5" />
               Refresh
             </button>
+            <Link href="/investment-team/skills" className="nf-btn">
+              <Bot className="h-3.5 w-3.5" />
+              My Skills
+            </Link>
             <Link href="/investment-team" className="nf-btn">
               <Workflow className="h-3.5 w-3.5" />
               Legacy Workflow

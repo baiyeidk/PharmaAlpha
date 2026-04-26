@@ -30,6 +30,8 @@ The project-first workspace is backend-backed. It can create/list projects, show
 Recent project-first behavior:
 
 - Team tasks are created from project members, their `SkillDefinition`, and their `SkillSop`.
+- Skill/SOP maintenance is employee-owned. Use `/investment-team/skills` for the logged-in employee to create their own skills and SOPs.
+- Project pages can assign work to member skills, but must not create or edit another employee's capabilities.
 - The project task form avoids frontend over-blocking. If topic/SOP is omitted, it falls back to a valid task topic and the member skill's default/first SOP.
 - Completed tasks are historical records. They should not stay in the runnable task slot; use view output or duplicate into a new draft.
 - Session execution first calls an OpenAI-compatible LLM endpoint directly with project context, skill description, SOP description, structured SOP config, and selected input artifacts.
@@ -58,6 +60,7 @@ During the competition/demo phase, project access is open by default for authent
 ### Frontend
 
 - `src/app/(dashboard)/investment-team/projects/page.tsx`: project-first workspace.
+- `src/app/(dashboard)/investment-team/skills/page.tsx`: employee-owned skill and SOP maintenance page.
 - `src/hooks/use-employee-investment-projects.ts`: project-first data access hook.
 - `src/components/chat/chat-view.tsx`: shared chat/canvas shell, now accepts optional `projectId` so project chat can save artifacts.
 - `src/components/canvas/*`: shared canvas, now can save nodes as project artifacts when a project context is active.
@@ -68,6 +71,7 @@ During the competition/demo phase, project access is open by default for authent
 
 - `src/app/api/employee-investment/projects/*`: project CRUD, members, artifacts, and sessions.
 - `src/app/api/employee-investment/sessions/*`: session detail and execution.
+- `src/app/api/employee-investment/skills/*`: current-employee-only skill and SOP maintenance.
 - `src/app/api/chat/*`: chat history, streaming, persistence, and project context injection.
 - `src/app/api/canvas/*`: board persistence with project conversation access checks.
 - `src/lib/employee-investment/projects.ts`: project access and project conversation helpers.

@@ -35,6 +35,21 @@ Each SOP includes structured config such as:
 
 The goal is for model output to look like a real investment research memo, not a demo fallback.
 
+## Skill/SOP Maintenance Direction
+
+Skill and SOP maintenance should be employee-owned, not project-owned.
+
+Current implementation:
+
+- `/investment-team/skills` is the dedicated page for the logged-in employee's own capabilities.
+- Users can create only their own `SkillDefinition`.
+- Users can add SOPs only to skills they own.
+- Project pages consume member skills for task assignment but should not create or edit another member's capabilities.
+- `/api/employee-investment/skills` no longer accepts a target employee id from the client. It resolves the employee from the authenticated session.
+- `/api/employee-investment/skills/:skillId/sops` verifies ownership before writing SOP records.
+
+This keeps the product model clear: projects assign work to existing employee capabilities; employees maintain their own capability library.
+
 ## Execution Path
 
 `POST /api/employee-investment/sessions/:sessionId/execute` now builds a prompt from:
@@ -75,7 +90,9 @@ Python fallback dependencies are tracked in `agents/requirements.txt`, including
 
 ## Docker Deployment
 
-The Docker startup path now handles database bootstrap for the demo environment:
+The Docker image contains the Next.js app, Prisma client, Python agent runtime dependencies, `postgresql-client`, and the runtime entrypoint script.
+
+The Docker startup path handles database bootstrap for the demo environment:
 
 1. Wait for `DATABASE_URL` to become reachable.
 2. Enable the `vector` extension.
@@ -84,6 +101,8 @@ The Docker startup path now handles database bootstrap for the demo environment:
 5. Start the Next.js server.
 
 For production or externally managed databases, set `RUN_PROJECT_FIRST_SEED=false` and run migrations/seeds through the deployment pipeline instead of app startup.
+
+`docker-compose.yml` starts a local `pgvector/pgvector:pg16` database by default. If `.env.production` is absent, compose still starts and uses the non-secret defaults from the compose file plus environment variables provided by the shell.
 
 ## Verification
 
