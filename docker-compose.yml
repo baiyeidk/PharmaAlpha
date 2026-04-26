@@ -31,6 +31,7 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/pharma_alpha?schema=public
       PLATFORM_API_BASE: http://localhost:3000/api
+      RUN_PROJECT_FIRST_SEED: ${RUN_PROJECT_FIRST_SEED:-true}
     depends_on:
       db:
         condition: service_healthy

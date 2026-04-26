@@ -66,6 +66,16 @@ pip install -r agents/requirements.txt
 pnpm dev
 ```
 
+### Docker Compose
+
+The app container waits for PostgreSQL, enables `pgvector`, runs `npx prisma db push`, and then optionally runs the project-first demo seed:
+
+```bash
+docker compose up --build
+```
+
+By default `RUN_PROJECT_FIRST_SEED=true`, so `prisma/seeds/project_first_demo.sql` is applied at container startup. Set `RUN_PROJECT_FIRST_SEED=false` for production or an externally managed database.
+
 ## Adding a New Agent
 
 1. Create a directory under `agents/`:

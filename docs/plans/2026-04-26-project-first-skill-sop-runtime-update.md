@@ -73,6 +73,18 @@ Python fallback dependencies are tracked in `agents/requirements.txt`, including
 - `openai>=1.0.0`
 - `psycopg[binary]>=3.2.0`
 
+## Docker Deployment
+
+The Docker startup path now handles database bootstrap for the demo environment:
+
+1. Wait for `DATABASE_URL` to become reachable.
+2. Enable the `vector` extension.
+3. Run `npx prisma db push --accept-data-loss`.
+4. Run `prisma/seeds/project_first_demo.sql` when `RUN_PROJECT_FIRST_SEED=true`.
+5. Start the Next.js server.
+
+For production or externally managed databases, set `RUN_PROJECT_FIRST_SEED=false` and run migrations/seeds through the deployment pipeline instead of app startup.
+
 ## Verification
 
 Verified locally:
@@ -80,4 +92,3 @@ Verified locally:
 - `npx tsc --noEmit`
 - targeted eslint for project-first page, project hook, and session execution API
 - local Python imports for `openai` and `psycopg`
-
