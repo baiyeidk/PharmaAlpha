@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 from typing import Any, Generator
@@ -41,6 +42,7 @@ MAX_TOOL_LOOPS = 10
 RUNTIME_BUDGET_RATIO = 0.8
 TOOL_TRUNC_HEAD = 500
 TOOL_TRUNC_TAIL = 500
+ERROR_BRACKET_RE = re.compile(r"^\[[^\]]*(?:Error|错误)\]", re.IGNORECASE)
 
 
 class PECAgent(BaseAgent):
@@ -81,6 +83,13 @@ class PECAgent(BaseAgent):
 
     def _get_model(self) -> str:
         return os.environ.get("LLM_MODEL") or "deepseek-chat"
+
+    @staticmethod
+    def _is_tool_result_success(result: str) -> bool:
+        text = (result or "").lstrip()
+        if not text:
+            return True
+        return ERROR_BRACKET_RE.match(text) is None
 
     # ── LLM call helpers ────────────────────────────────────
 
@@ -201,7 +210,7 @@ class PECAgent(BaseAgent):
                 t1 = time.time()
                 yield AgentToolStart(name=fn_name, args=fn_args)
                 result_str = registry.execute(fn_name, fn_args)
-                success = not result_str.startswith("[Tool Error]")
+                success = self._is_tool_result_success(result_str)
                 tool_elapsed = time.time() - t1
                 _log(f"PECAgent {phase} tool done: {fn_name} in {tool_elapsed:.1f}s | ok={success}")
                 flog.log_tool_exec(round_i, fn_name, fn_args, result_str, success, tool_elapsed)
@@ -249,6 +258,58 @@ class PECAgent(BaseAgent):
         return collected_all_text
 
     # ── Memory helpers ────────────────────────────────────
+
+    @staticmethod
+    def _is_substantive_user_text(text: str) -> bool:
+        t = (text or "").strip()
+        if len(t) < 4:
+            return False
+        # Filter out purely numeric/menu-like short replies such as "1", "11", "继续1"
+        if t.isdigit():
+            return False
+        if len(t) <= 6 and all(ch.isdigit() or ch in {" ", ",", ".", "，", "。"} for ch in t):
+            return False
+        return True
+
+    def _build_recall_query(self, chat_messages: list[dict[str, Any]]) -> str:
+        """Build a richer memory/RAG recall query from recent substantive user turns."""
+        user_msgs = [
+            (m.get("content", "") or "").strip()
+            for m in chat_messages
+            if m.get("role") == "user"
+        ]
+        substantive = [m for m in user_msgs if self._is_substantive_user_text(m)]
+        chosen = substantive[-3:] if substantive else user_msgs[-1:]
+        return "；".join([m for m in chosen if m]).strip()
+
+    @staticmethod
+    def _compact_text(text: str, max_chars: int = 1200) -> str:
+        t = (text or "").strip()
+        if len(t) <= max_chars:
+            return t
+        return t[:max_chars] + "\n[...短期记忆已截断]"
+
+    def _build_short_term_memory(
+        self,
+        execute_results: list[str],
+        check_summaries: list[str],
+        check_feedback: list[str],
+    ) -> str | None:
+        """Build rolling short-term memory for planning."""
+        parts: list[str] = []
+        if execute_results:
+            exec_mem = "\n\n".join(self._compact_text(x, 1000) for x in execute_results[-2:] if x)
+            if exec_mem:
+                parts.append("### 近期执行结果\n" + exec_mem)
+        if check_summaries:
+            check_mem = "\n".join(check_summaries[-3:])
+            if check_mem:
+                parts.append("### 近期审查结论\n" + check_mem)
+        if check_feedback:
+            parts.append("### 当前待补缺口\n" + "\n".join(f"- {g}" for g in check_feedback))
+        if not parts:
+            return None
+        return "## 短期记忆（本次会话内）\n" + "\n\n".join(parts)
 
     def _recall_memory(self, user_question: str) -> str | None:
         """Auto-recall relevant memories for the current query."""
@@ -313,6 +374,7 @@ class PECAgent(BaseAgent):
 
         user_question = request.messages[-1].get("content", "") if request.messages else ""
         chat_messages = [{"role": m.get("role", "user"), "content": m.get("content", "")} for m in request.messages]
+        recall_query = self._build_recall_query(chat_messages) or user_question
 
         canvas_nodes = request.params.get("canvas_nodes", [])
         if canvas_nodes:
@@ -330,9 +392,10 @@ class PECAgent(BaseAgent):
 
         all_execute_results: list[str] = []
         check_feedback: list[str] = []
+        all_check_summaries: list[str] = []
 
-        memory_context = self._recall_memory(user_question)
-        rag_context = self._pre_search_rag(user_question)
+        memory_context = self._recall_memory(recall_query)
+        rag_context = self._pre_search_rag(recall_query)
 
         try:
             for round_i in range(1, MAX_PEC_ROUNDS + 1):
@@ -341,14 +404,21 @@ class PECAgent(BaseAgent):
                 # ── PLAN ──
                 yield PhaseStart(phase="plan", round=round_i)
 
+                short_term_memory = self._build_short_term_memory(
+                    all_execute_results,
+                    all_check_summaries,
+                    check_feedback,
+                )
+                plan_memory_context = memory_context
+                if short_term_memory:
+                    plan_memory_context = (
+                        f"{memory_context}\n\n{short_term_memory}" if memory_context else short_term_memory
+                    )
+
                 plan_ctx = self._build_ctx(
                     build_plan_prompt(), chat_messages,
-                    memory_context=memory_context, rag_context=rag_context,
+                    memory_context=plan_memory_context, rag_context=rag_context,
                 )
-                if check_feedback:
-                    plan_ctx.inject_phase_context(
-                        "上一轮审查发现以下缺失，请重新规划补充：\n" + "\n".join(f"- {g}" for g in check_feedback)
-                    )
                 plan_data = self._call_llm_json(build_plan_prompt(), plan_ctx.build()[1:], flog, "plan", round_i)
                 steps = plan_data.get("steps", [])
 
@@ -404,6 +474,13 @@ class PECAgent(BaseAgent):
                 check_data = self._call_llm_json(build_check_prompt(), check_ctx.build()[1:], flog, "check", round_i)
                 passed = check_data.get("passed", True)
                 gaps = check_data.get("gaps", [])
+                check_summary = str(check_data.get("summary", "") or "").strip()
+                summary_parts = [f"第{round_i}轮: {'通过' if passed else '未通过'}"]
+                if check_summary:
+                    summary_parts.append(check_summary)
+                if gaps:
+                    summary_parts.append("缺失项: " + "; ".join(str(g) for g in gaps))
+                all_check_summaries.append(" | ".join(summary_parts))
 
                 yield AgentCheck(passed=passed, summary=check_data.get("summary", ""), gaps=gaps)
                 yield PhaseEnd(phase="check", round=round_i)

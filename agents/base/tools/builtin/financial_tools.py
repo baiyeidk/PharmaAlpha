@@ -20,7 +20,8 @@ _USER_AGENT = (
 def _fetch_json(url: str) -> Any:
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
     with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
-        return json.loads(resp.read().decode("utf-8", errors="replace"))
+        # Some upstream endpoints occasionally prepend UTF-8 BOM.
+        return json.loads(resp.read().decode("utf-8-sig", errors="replace"))
 
 
 def _eastmoney_market_code(stock_code: str) -> str:
@@ -44,7 +45,7 @@ def _fetch_summary(stock_code: str) -> str:
         data = _fetch_json(url)
         d = data.get("data", {})
         if not d:
-            return f"未找到股票 {stock_code} 的财务数据"
+            return f"[Financial Error] 未找到股票 {stock_code} 的财务数据"
 
         def fmt(v: Any, divisor: int = 1) -> str:
             if v is None or v == "-":
@@ -85,7 +86,7 @@ def _fetch_income(stock_code: str) -> str:
         data = _fetch_json(url)
         reports = data.get("data", [])
         if not reports:
-            return f"未找到股票 {stock_code} 的利润表数据"
+            return f"[Financial Error] 未找到股票 {stock_code} 的利润表数据"
 
         lines = [f"【{stock_code}】利润表（最近报告期）", ""]
         lines.append("报告期 | 营业总收入 | 营业总成本 | 净利润 | 毛利率 | 净利率")

@@ -101,8 +101,9 @@ class ContextBuilder:
 
         return self
 
-    def inject_phase_context(self, *parts: str) -> "ContextBuilder":
-        self._phase_context.clear()
+    def inject_phase_context(self, *parts: str, replace: bool = False) -> "ContextBuilder":
+        if replace:
+            self._phase_context.clear()
         for part in parts:
             if part:
                 self._phase_context.append({

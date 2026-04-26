@@ -245,7 +245,7 @@ def search_financial_reports(
         results.extend(_szse_search(stock_code, report_type, limit))
 
     if not results:
-        return f"未找到 {stock_code} 的{report_type}财报，请确认代码正确。"
+        return f"[Report Error] 未找到 {stock_code} 的{report_type}财报，请确认代码正确。"
 
     lines = []
     for i, r in enumerate(results[:limit], 1):

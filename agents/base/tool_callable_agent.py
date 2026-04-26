@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 import pathlib
@@ -26,6 +27,16 @@ def _log(msg: str) -> None:
     ts = time.strftime("%H:%M:%S", time.localtime())
     sys.stderr.write(f"[{ts}] {msg}\n")
     sys.stderr.flush()
+
+
+_ERROR_BRACKET_RE = re.compile(r"^\[[^\]]*(?:Error|错误)\]", re.IGNORECASE)
+
+
+def _is_tool_result_success(result: str) -> bool:
+    text = (result or "").lstrip()
+    if not text:
+        return True
+    return _ERROR_BRACKET_RE.match(text) is None
 
 
 class _LLMFileLogger:
@@ -359,7 +370,7 @@ class ToolCallableAgent(BaseAgent):
                     t1 = time.time()
                     yield AgentToolStart(name=fn_name, args=fn_args)
                     result_str = self._registry.execute(fn_name, fn_args)
-                    success = not result_str.startswith("[Tool Error]")
+                    success = _is_tool_result_success(result_str)
                     tool_elapsed = time.time() - t1
                     _log(f"{agent_label} tool done: {fn_name} in {tool_elapsed:.1f}s | ok={success} | len={len(result_str)}")
                     flog.log_tool_exec(loop_i + 1, fn_name, fn_args, result_str, success, tool_elapsed)
