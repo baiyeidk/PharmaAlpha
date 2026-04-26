@@ -8,13 +8,14 @@ import { executeCanvasTool } from "@/lib/agents/canvas-tools";
 import { getCanvasSystemMessage, getCanvasToolsForLLM } from "@/lib/agents/tool-definitions";
 import { estimateMessagesTokens, summarizeHistory } from "@/lib/agents/summarizer";
 import { embedTexts } from "@/lib/embedding";
-import { resolveLlmConfigForUser } from "@/lib/llm-user-settings";
+import { resolveEmbeddingConfigForUser, resolveLlmConfigForUser } from "@/lib/llm-user-settings";
 
 export const runtime = "nodejs";
 
 const HISTORY_LOAD_LIMIT = 50;
 const MIN_CONTENT_FOR_EXTRACTION = 50;
 const MEMORY_MAX_PER_USER = 200;
+const MEMORY_EXTRACTION_TIMEOUT_MS = 8_000;
 
 async function loadHistoryFromDB(conversationId: string) {
   const rows = await prisma.message.findMany({
@@ -129,14 +130,18 @@ async function extractMemoryWithLLM(
   if (content.length < MIN_CONTENT_FOR_EXTRACTION) return;
 
   const config = await resolveLlmConfigForUser(userId, {
-    defaultBaseUrl: "https://api.openai.com/v1",
+    // Keep extraction LLM defaults consistent with chat-agent runtime defaults.
+    defaultBaseUrl: "https://api.deepseek.com",
     defaultModel: "deepseek-chat",
   });
   const apiKey = config.apiKey;
   const baseUrl = config.baseUrl;
   const model = config.model;
 
-  if (!apiKey) return;
+  if (!apiKey) {
+    console.warn("[memory] extraction skipped: no API key resolved");
+    return;
+  }
 
   let items: MemoryItem[];
   try {
@@ -184,10 +189,17 @@ async function extractMemoryWithLLM(
 
   if (!validItems.length) return;
 
+  const embeddingConfig = await resolveEmbeddingConfigForUser(userId);
   const textsToEmbed = validItems.map(
     (it) => `${it.subject} ${it.predicate || ""} ${it.object}`.trim()
   );
-  const embeddings = await embedTexts(textsToEmbed);
+  const embeddings = await embedTexts(textsToEmbed, {
+    provider: embeddingConfig.provider,
+    apiKey: embeddingConfig.apiKey,
+    baseUrl: embeddingConfig.baseUrl,
+    model: embeddingConfig.model,
+    dimensions: embeddingConfig.dimensions,
+  });
 
   for (let i = 0; i < validItems.length; i++) {
     const item = validItems[i];
@@ -393,6 +405,7 @@ export async function POST(req: Request) {
     defaultBaseUrl: "https://api.deepseek.com",
     defaultModel: "deepseek-chat",
   });
+  const embeddingConfig = await resolveEmbeddingConfigForUser(session.id);
   const agentExtraEnv: Record<string, string> = {
     MEMORY_USER_ID: session.id,
     AGENT_USER_ID: session.id,
@@ -409,6 +422,21 @@ export async function POST(req: Request) {
   }
   if (llmConfig.model) {
     agentExtraEnv.LLM_MODEL = llmConfig.model;
+  }
+  if (embeddingConfig.apiKey) {
+    agentExtraEnv.EMBEDDING_API_KEY = embeddingConfig.apiKey;
+  }
+  if (embeddingConfig.baseUrl) {
+    agentExtraEnv.EMBEDDING_BASE_URL = embeddingConfig.baseUrl;
+  }
+  if (embeddingConfig.model) {
+    agentExtraEnv.EMBEDDING_MODEL = embeddingConfig.model;
+  }
+  if (embeddingConfig.provider) {
+    agentExtraEnv.EMBEDDING_PROVIDER = embeddingConfig.provider;
+  }
+  if (Number.isFinite(embeddingConfig.dimensions)) {
+    agentExtraEnv.EMBEDDING_DIMENSIONS = String(embeddingConfig.dimensions);
   }
 
   const agentStream = executeAgent(
@@ -465,9 +493,16 @@ export async function POST(req: Request) {
           },
         });
         if (isPECAgent && fullContent) {
-          extractMemoryWithLLM(fullContent, session!.id, convId!).catch((err) => {
-            console.warn("Async memory extraction failed:", err);
-          });
+          try {
+            await Promise.race([
+              extractMemoryWithLLM(fullContent, session!.id, convId!),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("memory extraction timeout")), MEMORY_EXTRACTION_TIMEOUT_MS)
+              ),
+            ]);
+          } catch (err) {
+            console.warn("Memory extraction failed or timed out:", err);
+          }
         }
       }
     },

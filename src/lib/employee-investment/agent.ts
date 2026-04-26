@@ -5,7 +5,7 @@ import {
   type AgentInput,
   type AgentOutputChunk,
 } from "@/lib/agents";
-import { resolveLlmConfigForUser } from "@/lib/llm-user-settings";
+import { resolveEmbeddingConfigForUser, resolveLlmConfigForUser } from "@/lib/llm-user-settings";
 import { ensureEmployeeContext } from "./context";
 import type { AgentInvocationResult } from "./types";
 import type { SessionUser } from "@/lib/auth";
@@ -30,10 +30,13 @@ export async function invokeEmployeeInvestmentAgent<T = Record<string, unknown>>
     ensureEmployeeContext(session),
   ]);
 
-  const llmConfig = await resolveLlmConfigForUser(session.id, {
-    defaultBaseUrl: "https://api.deepseek.com",
-    defaultModel: "deepseek-chat",
-  });
+  const [llmConfig, embeddingConfig] = await Promise.all([
+    resolveLlmConfigForUser(session.id, {
+      defaultBaseUrl: "https://api.deepseek.com",
+      defaultModel: "deepseek-chat",
+    }),
+    resolveEmbeddingConfigForUser(session.id),
+  ]);
 
   const extraEnv: Record<string, string> = {
     AGENT_USER_ID: session.id,
@@ -51,6 +54,21 @@ export async function invokeEmployeeInvestmentAgent<T = Record<string, unknown>>
   }
   if (llmConfig.model) {
     extraEnv.LLM_MODEL = llmConfig.model;
+  }
+  if (embeddingConfig.apiKey) {
+    extraEnv.EMBEDDING_API_KEY = embeddingConfig.apiKey;
+  }
+  if (embeddingConfig.baseUrl) {
+    extraEnv.EMBEDDING_BASE_URL = embeddingConfig.baseUrl;
+  }
+  if (embeddingConfig.model) {
+    extraEnv.EMBEDDING_MODEL = embeddingConfig.model;
+  }
+  if (embeddingConfig.provider) {
+    extraEnv.EMBEDDING_PROVIDER = embeddingConfig.provider;
+  }
+  if (Number.isFinite(embeddingConfig.dimensions)) {
+    extraEnv.EMBEDDING_DIMENSIONS = String(embeddingConfig.dimensions);
   }
 
   const stream = executeAgent(

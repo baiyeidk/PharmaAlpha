@@ -156,8 +156,11 @@ export function useChatStream({
 
       abortRef.current = new AbortController();
 
-      let currentBlocks: MessageBlock[] = [];
+      const currentBlocks: MessageBlock[] = [];
       let activePhaseBlock: string | null = null;
+      let receivedAnyChunk = false;
+      let receivedVisibleContent = false;
+      let streamErrorMessage: string | null = null;
 
       function getActivePhaseBlock(): MessageBlock | null {
         if (activePhaseBlock) {
@@ -261,10 +264,12 @@ export function useChatStream({
               }
 
               if (chunk.type === "tool_call") {
+                receivedAnyChunk = true;
                 if (chunk.metadata?.tool && onToolCall) {
                   onToolCall(chunk.name || chunk.metadata.tool as string, chunk.metadata);
                 }
               } else if (chunk.type === "phase_start") {
+                receivedAnyChunk = true;
                 const phase = chunk.phase || "unknown";
                 const round = chunk.round || 1;
                 if (phase === "synthesize") {
@@ -292,6 +297,7 @@ export function useChatStream({
                 }
                 updateAssistant();
               } else if (chunk.type === "phase_end") {
+                receivedAnyChunk = true;
                 const block = getActivePhaseBlock();
                 if (block && block.status === "streaming") {
                   block.status = "done";
@@ -299,12 +305,14 @@ export function useChatStream({
                 activePhaseBlock = null;
                 updateAssistant();
               } else if (chunk.type === "plan") {
+                receivedAnyChunk = true;
                 const block = getActivePhaseBlock();
                 if (block) {
                   block.planSteps = chunk.steps;
                 }
                 updateAssistant();
               } else if (chunk.type === "check") {
+                receivedAnyChunk = true;
                 const block = getActivePhaseBlock();
                 if (block) {
                   block.checkResult = {
@@ -315,6 +323,8 @@ export function useChatStream({
                 }
                 updateAssistant();
               } else if (chunk.type === "chunk") {
+                receivedAnyChunk = true;
+                if ((chunk.content || "").trim()) receivedVisibleContent = true;
                 const phaseBlock = getActivePhaseBlock();
                 if (phaseBlock) {
                   phaseBlock.content += chunk.content || "";
@@ -325,6 +335,7 @@ export function useChatStream({
                 }
                 updateAssistant();
               } else if (chunk.type === "agent_delegate") {
+                receivedAnyChunk = true;
                 const prevBlock = currentBlocks[currentBlocks.length - 1];
                 if (prevBlock && prevBlock.status === "streaming") {
                   prevBlock.status = "done";
@@ -342,6 +353,8 @@ export function useChatStream({
                 activePhaseBlock = block.id;
                 updateAssistant();
               } else if (chunk.type === "agent_chunk") {
+                receivedAnyChunk = true;
+                if ((chunk.content || "").trim()) receivedVisibleContent = true;
                 const block = getActivePhaseBlock()
                   || currentBlocks.find((b) => b.agentName === chunk.agent_name && b.status === "streaming");
                 if (block) {
@@ -349,6 +362,7 @@ export function useChatStream({
                 }
                 updateAssistant();
               } else if (chunk.type === "tool_start") {
+                receivedAnyChunk = true;
                 const targetBlock = getActivePhaseBlock() || currentBlocks[currentBlocks.length - 1];
                 if (targetBlock) {
                   targetBlock.toolEvents.push({
@@ -360,6 +374,7 @@ export function useChatStream({
                 }
                 updateAssistant();
               } else if (chunk.type === "tool_result") {
+                receivedAnyChunk = true;
                 const targetBlock = getActivePhaseBlock() || currentBlocks[currentBlocks.length - 1];
                 if (targetBlock) {
                   const ev = [...targetBlock.toolEvents].reverse().find((e) => e.name === chunk.name && e.status === "running");
@@ -370,6 +385,7 @@ export function useChatStream({
                 }
                 updateAssistant();
               } else if (chunk.type === "agent_result") {
+                receivedAnyChunk = true;
                 const block = currentBlocks.find(
                   (b) => b.agentName === chunk.agent_name && b.status === "streaming"
                 );
@@ -379,6 +395,8 @@ export function useChatStream({
                 activePhaseBlock = null;
                 updateAssistant();
               } else if (chunk.type === "result") {
+                receivedAnyChunk = true;
+                if ((chunk.content || "").trim()) receivedVisibleContent = true;
                 const phaseBlock = getActivePhaseBlock();
                 if (phaseBlock && phaseBlock.type === "supervisor") {
                   phaseBlock.content += chunk.content || "";
@@ -396,10 +414,12 @@ export function useChatStream({
                 });
                 updateAssistant();
               } else if (chunk.type === "error") {
+                receivedAnyChunk = true;
+                streamErrorMessage = chunk.content || "Agent returned an unknown error.";
                 setMessages((prev) =>
                   prev.map((m) =>
                     m.id === assistantId
-                      ? { ...m, content: `Error: ${chunk.content}`, isStreaming: false }
+                      ? { ...m, content: `Error: ${streamErrorMessage}`, isStreaming: false }
                       : m
                   )
                 );
@@ -409,12 +429,36 @@ export function useChatStream({
             }
           }
         }
+
+        // Agent stream ended without explicit result/error content:
+        // provide a visible fallback so the user can perceive completion failure.
+        if (!streamErrorMessage && (!receivedAnyChunk || !receivedVisibleContent)) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId
+                ? {
+                    ...m,
+                    content: "Agent未返回有效内容，可能已中断或失败，请重试。",
+                    isStreaming: false,
+                  }
+                : m
+            )
+          );
+        }
       } catch (err) {
         console.error("[chat-stream] fetch failed", {
           debugId,
           error: err instanceof Error ? err.message : String(err),
         });
-        if ((err as Error).name !== "AbortError") {
+        if ((err as Error).name === "AbortError") {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId
+                ? { ...m, content: "已停止生成。", isStreaming: false }
+                : m
+            )
+          );
+        } else {
           setMessages((prev) =>
             prev.map((m) =>
               m.id === assistantId
@@ -435,7 +479,7 @@ export function useChatStream({
         onStreamEnd?.();
       }
     },
-    [agentId, conversationId, messages, isLoading, onConversationCreated, onToolCall, onStreamEnd]
+    [agentId, conversationId, isLoading, onConversationCreated, onToolCall, onStreamEnd]
   );
 
   const stopGeneration = useCallback(() => {

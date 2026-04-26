@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import {
     getUserLlmSetting,
+    resolveEmbeddingConfigForUser,
     resolveLlmConfigForUser,
     saveUserLlmSetting,
 } from "@/lib/llm-user-settings";
@@ -18,9 +19,10 @@ export async function GET() {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const [stored, effective] = await Promise.all([
+    const [stored, effective, effectiveEmbedding] = await Promise.all([
         getUserLlmSetting(session.id),
         resolveLlmConfigForUser(session.id),
+        resolveEmbeddingConfigForUser(session.id),
     ]);
 
     return NextResponse.json({
@@ -36,6 +38,14 @@ export async function GET() {
             model: effective.model,
             baseUrl: effective.baseUrl,
             source: effective.source,
+        },
+        effectiveEmbedding: {
+            hasApiKey: !!effectiveEmbedding.apiKey,
+            provider: effectiveEmbedding.provider,
+            model: effectiveEmbedding.model,
+            baseUrl: effectiveEmbedding.baseUrl,
+            dimensions: effectiveEmbedding.dimensions,
+            source: effectiveEmbedding.source,
         },
     });
 }
@@ -61,9 +71,10 @@ export async function PUT(req: Request) {
         baseUrl: baseUrlInput,
     });
 
-    const [stored, effective] = await Promise.all([
+    const [stored, effective, effectiveEmbedding] = await Promise.all([
         getUserLlmSetting(session.id),
         resolveLlmConfigForUser(session.id),
+        resolveEmbeddingConfigForUser(session.id),
     ]);
 
     return NextResponse.json({
@@ -79,6 +90,14 @@ export async function PUT(req: Request) {
             model: effective.model,
             baseUrl: effective.baseUrl,
             source: effective.source,
+        },
+        effectiveEmbedding: {
+            hasApiKey: !!effectiveEmbedding.apiKey,
+            provider: effectiveEmbedding.provider,
+            model: effectiveEmbedding.model,
+            baseUrl: effectiveEmbedding.baseUrl,
+            dimensions: effectiveEmbedding.dimensions,
+            source: effectiveEmbedding.source,
         },
     });
 }

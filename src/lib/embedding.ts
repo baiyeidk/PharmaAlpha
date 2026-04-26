@@ -11,6 +11,14 @@ interface EmbeddingProvider {
   embed(texts: string[]): Promise<(number[] | null)[]>;
 }
 
+export interface EmbeddingRuntimeConfig {
+  provider?: string;
+  apiKey?: string;
+  baseUrl?: string;
+  model?: string;
+  dimensions?: number;
+}
+
 function getConfig() {
   return {
     provider: process.env.EMBEDDING_PROVIDER || "openai",
@@ -75,9 +83,11 @@ async function openaiEmbed(
   return results;
 }
 
-function resolveBaseUrl(provider: string): string {
-  const config = getConfig();
-  if (process.env.EMBEDDING_BASE_URL) return config.baseUrl;
+function resolveBaseUrl(
+  provider: string,
+  config: ReturnType<typeof getConfig>
+): string {
+  if (config.baseUrl) return config.baseUrl;
 
   switch (provider) {
     case "dashscope":
@@ -89,8 +99,11 @@ function resolveBaseUrl(provider: string): string {
   }
 }
 
-function resolveModel(provider: string): string {
-  if (process.env.EMBEDDING_MODEL) return process.env.EMBEDDING_MODEL;
+function resolveModel(
+  provider: string,
+  config: ReturnType<typeof getConfig>
+): string {
+  if (config.model) return config.model;
 
   switch (provider) {
     case "dashscope":
@@ -104,10 +117,19 @@ function resolveModel(provider: string): string {
 
 let _cached: EmbeddingProvider | null = null;
 
-function getEmbeddingProvider(): EmbeddingProvider {
-  if (_cached) return _cached;
-
-  const config = getConfig();
+function buildEmbeddingProvider(
+  override?: EmbeddingRuntimeConfig
+): EmbeddingProvider {
+  const mergedBase = getConfig();
+  const config = {
+    ...mergedBase,
+    ...override,
+    provider: (override?.provider || mergedBase.provider || "openai").toLowerCase(),
+    dimensions:
+      typeof override?.dimensions === "number"
+        ? override.dimensions
+        : mergedBase.dimensions,
+  };
   const provider = config.provider.toLowerCase();
 
   if (provider === "local") {
@@ -118,14 +140,21 @@ function getEmbeddingProvider(): EmbeddingProvider {
 
   const resolved = {
     ...config,
-    baseUrl: resolveBaseUrl(provider),
-    model: resolveModel(provider),
+    baseUrl: resolveBaseUrl(provider, config),
+    model: resolveModel(provider, config),
   };
 
-  _cached = {
+  return {
     embed: (texts: string[]) => openaiEmbed(texts, resolved),
   };
+}
 
+function getEmbeddingProvider(override?: EmbeddingRuntimeConfig): EmbeddingProvider {
+  if (override) {
+    return buildEmbeddingProvider(override);
+  }
+  if (_cached) return _cached;
+  _cached = buildEmbeddingProvider();
   return _cached;
 }
 
@@ -134,16 +163,20 @@ function getEmbeddingProvider(): EmbeddingProvider {
  * Returns null for any text that failed to embed.
  */
 export async function embedTexts(
-  texts: string[]
+  texts: string[],
+  override?: EmbeddingRuntimeConfig
 ): Promise<(number[] | null)[]> {
-  return getEmbeddingProvider().embed(texts);
+  return getEmbeddingProvider(override).embed(texts);
 }
 
 /**
  * Convenience: embed a single text.
  */
-export async function embedText(text: string): Promise<number[] | null> {
-  const results = await embedTexts([text]);
+export async function embedText(
+  text: string,
+  override?: EmbeddingRuntimeConfig
+): Promise<number[] | null> {
+  const results = await embedTexts([text], override);
   return results[0] ?? null;
 }
 
