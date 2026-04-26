@@ -29,7 +29,7 @@ def _log(msg: str) -> None:
 
 
 class _LLMFileLogger:
-    """Per-session file logger that records every LLM request/response verbatim."""
+    """Per-session file logger with human-friendly structured summaries."""
 
     def __init__(self, agent_label: str, session_id: str) -> None:
         _LOGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -37,6 +37,40 @@ class _LLMFileLogger:
         filename = f"{ts}_{agent_label}_{session_id[:8]}.jsonl"
         self._path = _LOGS_DIR / filename
         self._fh: Optional[TextIO] = None
+        self._verbose = os.environ.get("AGENT_LOG_VERBOSE", "").lower() in {"1", "true", "yes", "on"}
+
+    @staticmethod
+    def _shorten(value: Any, max_len: int = 200) -> str:
+        text = "" if value is None else str(value)
+        text = " ".join(text.split())
+        if len(text) <= max_len:
+            return text
+        return text[: max_len - 1] + "..."
+
+    def _summarize_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        for i, msg in enumerate(messages):
+            content = msg.get("content", "")
+            tool_calls = msg.get("tool_calls")
+            out.append({
+                "idx": i,
+                "role": msg.get("role", "unknown"),
+                "chars": len(str(content or "")),
+                "preview": self._shorten(content),
+                "tool_calls": len(tool_calls) if isinstance(tool_calls, list) else 0,
+            })
+        return out
+
+    @staticmethod
+    def _summarize_tools(tools: Any) -> list[str]:
+        if not isinstance(tools, list):
+            return []
+        names: list[str] = []
+        for t in tools:
+            fn = t.get("function") if isinstance(t, dict) else None
+            name = fn.get("name") if isinstance(fn, dict) else None
+            names.append(str(name or "unknown"))
+        return names
 
     def _ensure_open(self) -> TextIO:
         if self._fh is None or self._fh.closed:
@@ -52,37 +86,63 @@ class _LLMFileLogger:
     def log_request(self, loop_i: int, model: str,
                     messages: list[dict[str, Any]],
                     tools: Any) -> None:
-        self._write({
+        record: dict[str, Any] = {
             "event": "llm_request",
             "loop": loop_i,
             "model": model,
-            "messages": messages,
-            "tools": tools,
-        })
+            "message_count": len(messages),
+            "tool_count": len(tools) if isinstance(tools, list) else 0,
+            "tool_names": self._summarize_tools(tools),
+            "messages": self._summarize_messages(messages),
+            # Backward-compatible keys with concise content.
+            "tools": self._summarize_tools(tools),
+        }
+        if self._verbose:
+            record["messages_full"] = messages
+            record["tools_full"] = tools
+        self._write(record)
 
     def log_response(self, loop_i: int, content: str,
                      tool_calls: list[dict[str, Any]],
                      elapsed_s: float) -> None:
-        self._write({
+        tool_call_names = [str(tc.get("name") or "unknown") for tc in tool_calls]
+        record: dict[str, Any] = {
             "event": "llm_response",
             "loop": loop_i,
-            "content": content,
-            "tool_calls": tool_calls,
+            "content_chars": len(content),
+            "content_preview": self._shorten(content, max_len=240),
+            "tool_call_count": len(tool_calls),
+            "tool_call_names": tool_call_names,
             "elapsed_s": round(elapsed_s, 2),
-        })
+            # Backward-compatible keys with concise content.
+            "content": self._shorten(content, max_len=240),
+            "tool_calls": tool_call_names,
+        }
+        if self._verbose:
+            record["content_full"] = content
+            record["tool_calls_full"] = tool_calls
+        self._write(record)
 
     def log_tool_exec(self, loop_i: int, name: str,
                       args: dict[str, Any], result: str,
                       success: bool, elapsed_s: float) -> None:
-        self._write({
+        record: dict[str, Any] = {
             "event": "tool_exec",
             "loop": loop_i,
             "tool": name,
-            "args": args,
-            "result": result,
+            "args_preview": self._shorten(json.dumps(args, ensure_ascii=False, default=str), max_len=200),
+            "result_chars": len(result),
+            "result_preview": self._shorten(result, max_len=240),
             "success": success,
             "elapsed_s": round(elapsed_s, 2),
-        })
+            # Backward-compatible keys with concise content.
+            "args": args,
+            "result": self._shorten(result, max_len=240),
+        }
+        if self._verbose:
+            record["args_full"] = args
+            record["result_full"] = result
+        self._write(record)
 
     def log_error(self, msg: str) -> None:
         self._write({"event": "error", "message": msg})

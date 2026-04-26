@@ -8,6 +8,7 @@ import {
   isProjectAccessError,
 } from "@/lib/employee-investment";
 import { serializeArtifact } from "@/lib/employee-investment/serializers";
+import { resolveLlmConfigForUser } from "@/lib/llm-user-settings";
 
 export const runtime = "nodejs";
 
@@ -28,10 +29,10 @@ function buildSessionPrompt(params: {
 }) {
   const artifactSection = params.inputArtifacts.length
     ? params.inputArtifacts
-        .map((artifact, index) => {
-          return `### Input ${index + 1}: ${artifact.title}\n${artifact.content.slice(0, 1200)}`;
-        })
-        .join("\n\n")
+      .map((artifact, index) => {
+        return `### Input ${index + 1}: ${artifact.title}\n${artifact.content.slice(0, 1200)}`;
+      })
+      .join("\n\n")
     : "No input artifacts were selected.";
 
   const sopConfigSection = params.sopConfig
@@ -73,8 +74,8 @@ function buildFallbackSessionResult(params: {
 }) {
   const evidence = params.inputArtifacts.length
     ? params.inputArtifacts
-        .map((artifact) => `- ${artifact.title}: ${artifact.content.slice(0, 220).replace(/\s+/g, " ")}`)
-        .join("\n")
+      .map((artifact) => `- ${artifact.title}: ${artifact.content.slice(0, 220).replace(/\s+/g, " ")}`)
+      .join("\n")
     : "- No input artifacts selected. Treat this as a first-pass project analysis.";
 
   return [
@@ -123,14 +124,18 @@ function sanitizeRuntimeError(error: unknown) {
   return "Python agent runtime failed. See execution metadata or server logs for diagnostics.";
 }
 
-async function completeWithProjectLlm(prompt: string) {
-  const apiKey = process.env.LLM_API_KEY || process.env.DEEPSEEK_API_KEY;
+async function completeWithProjectLlm(prompt: string, userId: string) {
+  const resolved = await resolveLlmConfigForUser(userId, {
+    defaultBaseUrl: "https://api.deepseek.com",
+    defaultModel: "deepseek-chat",
+  });
+  const apiKey = resolved.apiKey;
   if (!apiKey) {
     throw new Error("LLM API key is required. Set LLM_API_KEY or DEEPSEEK_API_KEY.");
   }
 
-  const baseUrl = (process.env.LLM_BASE_URL || "https://api.deepseek.com").replace(/\/$/, "");
-  const model = process.env.LLM_MODEL || "deepseek-chat";
+  const baseUrl = resolved.baseUrl.replace(/\/$/, "");
+  const model = resolved.model;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30_000);
 
@@ -226,12 +231,12 @@ export async function POST(
     );
     const inputArtifacts = inputArtifactIds.length
       ? await prisma.projectArtifact.findMany({
-          where: {
-            id: { in: inputArtifactIds.filter((id): id is string => typeof id === "string") },
-            investmentProjectId: draft.investmentProjectId,
-          },
-          orderBy: { createdAt: "asc" },
-        })
+        where: {
+          id: { in: inputArtifactIds.filter((id): id is string => typeof id === "string") },
+          investmentProjectId: draft.investmentProjectId,
+        },
+        orderBy: { createdAt: "asc" },
+      })
       : [];
 
     const execution = await prisma.workflowExecution.create({
@@ -249,15 +254,15 @@ export async function POST(
           },
           skill: draft.skillDefinition
             ? {
-                id: draft.skillDefinition.id,
-                name: draft.skillDefinition.name,
-              }
+              id: draft.skillDefinition.id,
+              name: draft.skillDefinition.name,
+            }
             : null,
           sop: draft.skillSop
             ? {
-                id: draft.skillSop.id,
-                name: draft.skillSop.name,
-              }
+              id: draft.skillSop.id,
+              name: draft.skillSop.name,
+            }
             : null,
         }),
       },
@@ -278,7 +283,7 @@ export async function POST(
     let resultMetadata: Record<string, unknown> | null = null;
     let summary: string;
     try {
-      const result = await completeWithProjectLlm(prompt);
+      const result = await completeWithProjectLlm(prompt, session.id);
       summary = result.text;
       resultMetadata = result.metadata;
     } catch (error) {

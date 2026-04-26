@@ -29,35 +29,54 @@ class PlatformAPIClient:
             or os.environ.get("AGENT_API_KEY")
             or "pharma-agent-internal-key"
         )
+        self.user_id = os.environ.get("AGENT_USER_ID") or os.environ.get("MEMORY_USER_ID")
         self.timeout = timeout
+
+    def _build_url(self, path: str, params: dict[str, str] | None = None) -> str:
+        """Build a safe URL for non-ASCII paths (e.g. Chinese filenames)."""
+        parsed = urllib.parse.urlsplit(path)
+        raw_path = parsed.path if parsed.scheme else path
+        # Keep URL separators unescaped while encoding non-ASCII path segments.
+        encoded_path = urllib.parse.quote(raw_path, safe="/-_.~")
+
+        if parsed.scheme:
+            base = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, encoded_path, parsed.query, parsed.fragment))
+        else:
+            base = f"{self.base_url}{encoded_path}"
+
+        query_params: dict[str, str] = {}
+        if parsed.query:
+            query_params.update(dict(urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)))
+        if params:
+            query_params.update(params)
+
+        if query_params:
+            return f"{base}?{urllib.parse.urlencode(query_params)}"
+        return base
 
     def get(
         self, path: str, params: dict[str, str] | None = None
     ) -> Any:
-        url = f"{self.base_url}{path}"
-        if params:
-            qs = urllib.parse.urlencode(params)
-            url = f"{url}?{qs}"
+        url = self._build_url(path, params)
         return self._request(url, method="GET")
 
     def get_bytes(
         self, path: str, params: dict[str, str] | None = None
     ) -> bytes:
         """GET that returns raw bytes (for file downloads)."""
-        url = f"{self.base_url}{path}"
-        if params:
-            qs = urllib.parse.urlencode(params)
-            url = f"{url}?{qs}"
+        url = self._build_url(path, params)
         return self._request_raw(url)
 
     def post(self, path: str, body: dict[str, Any] | None = None) -> Any:
-        url = f"{self.base_url}{path}"
+        url = self._build_url(path)
         return self._request(url, method="POST", body=body)
 
     def _request(
         self, url: str, method: str = "GET", body: dict[str, Any] | None = None
     ) -> Any:
         headers = {"Authorization": f"Bearer {self.api_key}"}
+        if self.user_id:
+            headers["X-Agent-User-Id"] = self.user_id
         data = None
         if body is not None:
             data = json.dumps(body).encode("utf-8")
@@ -75,6 +94,8 @@ class PlatformAPIClient:
 
     def _request_raw(self, url: str) -> bytes:
         headers = {"Authorization": f"Bearer {self.api_key}"}
+        if self.user_id:
+            headers["X-Agent-User-Id"] = self.user_id
         req = urllib.request.Request(url, headers=headers, method="GET")
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:

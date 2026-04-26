@@ -34,7 +34,21 @@ interface SummarizeConfig {
   model: string;
 }
 
-function getSummarizeConfig(): SummarizeConfig {
+async function getSummarizeConfig(userId?: string): Promise<SummarizeConfig> {
+  if (userId) {
+    const { resolveLlmConfigForUser } = await import("@/lib/llm-user-settings");
+    const resolved = await resolveLlmConfigForUser(userId, {
+      defaultBaseUrl: "https://api.deepseek.com",
+      defaultModel: "deepseek-chat",
+      envModel: process.env.SUMMARY_MODEL || process.env.LLM_MODEL || "deepseek-chat",
+    });
+    return {
+      apiKey: resolved.apiKey,
+      baseUrl: resolved.baseUrl,
+      model: resolved.model,
+    };
+  }
+
   return {
     apiKey: process.env.LLM_API_KEY || process.env.DEEPSEEK_API_KEY || "",
     baseUrl: process.env.LLM_BASE_URL || "https://api.deepseek.com",
@@ -60,7 +74,7 @@ export async function summarizeHistory(
     .map((m) => `[${m.role}]: ${m.content}`)
     .join("\n\n");
 
-  const config = getSummarizeConfig();
+  const config = await getSummarizeConfig(userId);
   if (!config.apiKey) return messages;
 
   try {

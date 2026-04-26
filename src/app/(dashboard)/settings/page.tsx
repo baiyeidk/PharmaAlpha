@@ -1,5 +1,6 @@
 import { getSession } from "@/lib/auth";
 import { CheckCircle2, Cpu, Monitor, User2 } from "lucide-react";
+import { LlmSettingsPanel } from "@/components/settings/llm-settings-panel";
 
 export default async function SettingsPage() {
   const session = await getSession();
@@ -101,14 +102,16 @@ export default async function SettingsPage() {
               <span className="nf-nano">03</span>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
-              <PaletteSwatch name="bg-base"   value="#0a0a0b" />
+              <PaletteSwatch name="bg-base" value="#0a0a0b" />
               <PaletteSwatch name="bg-surface" value="#0e0e10" />
               <PaletteSwatch name="bg-elevated" value="#141416" />
-              <PaletteSwatch name="accent"   value="#ff6d1f" glow />
-              <PaletteSwatch name="accent2"  value="#e0a848" />
-              <PaletteSwatch name="border"   value="#2a2a2a" />
+              <PaletteSwatch name="accent" value="#ff6d1f" glow />
+              <PaletteSwatch name="accent2" value="#e0a848" />
+              <PaletteSwatch name="border" value="#2a2a2a" />
             </div>
           </section>
+
+          <LlmSettingsPanel />
         </div>
       </div>
     </div>

@@ -5,6 +5,7 @@ import {
   type AgentInput,
   type AgentOutputChunk,
 } from "@/lib/agents";
+import { resolveLlmConfigForUser } from "@/lib/llm-user-settings";
 import { ensureEmployeeContext } from "./context";
 import type { AgentInvocationResult } from "./types";
 import type { SessionUser } from "@/lib/auth";
@@ -29,13 +30,37 @@ export async function invokeEmployeeInvestmentAgent<T = Record<string, unknown>>
     ensureEmployeeContext(session),
   ]);
 
-  const stream = executeAgent(agent.entryPoint, {
-    ...input,
-    params: {
-      ...input.params,
-      employee_id: employee.employeeCode,
-    },
+  const llmConfig = await resolveLlmConfigForUser(session.id, {
+    defaultBaseUrl: "https://api.deepseek.com",
+    defaultModel: "deepseek-chat",
   });
+
+  const extraEnv: Record<string, string> = {
+    AGENT_USER_ID: session.id,
+    MEMORY_USER_ID: session.id,
+  };
+  if (llmConfig.apiKey) {
+    extraEnv.LLM_API_KEY = llmConfig.apiKey;
+    extraEnv.DEEPSEEK_API_KEY = llmConfig.apiKey;
+  }
+  if (llmConfig.baseUrl) {
+    extraEnv.LLM_BASE_URL = llmConfig.baseUrl;
+  }
+  if (llmConfig.model) {
+    extraEnv.LLM_MODEL = llmConfig.model;
+  }
+
+  const stream = executeAgent(
+    agent.entryPoint,
+    {
+      ...input,
+      params: {
+        ...input.params,
+        employee_id: employee.employeeCode,
+      },
+    },
+    { extraEnv }
+  );
 
   const reader = stream.getReader();
   const chunks: string[] = [];

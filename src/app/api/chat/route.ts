@@ -8,6 +8,7 @@ import { executeCanvasTool } from "@/lib/agents/canvas-tools";
 import { getCanvasSystemMessage, getCanvasToolsForLLM } from "@/lib/agents/tool-definitions";
 import { estimateMessagesTokens, summarizeHistory } from "@/lib/agents/summarizer";
 import { embedTexts } from "@/lib/embedding";
+import { resolveLlmConfigForUser } from "@/lib/llm-user-settings";
 
 export const runtime = "nodejs";
 
@@ -127,9 +128,15 @@ async function extractMemoryWithLLM(
 ): Promise<void> {
   if (content.length < MIN_CONTENT_FOR_EXTRACTION) return;
 
-  const apiKey = process.env.LLM_API_KEY || "";
-  const baseUrl = process.env.LLM_BASE_URL || "https://api.openai.com/v1";
-  const model = process.env.LLM_MODEL || "deepseek-chat";
+  const config = await resolveLlmConfigForUser(userId, {
+    defaultBaseUrl: "https://api.openai.com/v1",
+    defaultModel: "deepseek-chat",
+  });
+  const apiKey = config.apiKey;
+  const baseUrl = config.baseUrl;
+  const model = config.model;
+
+  if (!apiKey) return;
 
   let items: MemoryItem[];
   try {
@@ -348,10 +355,10 @@ export async function POST(req: Request) {
   const agentMessages = isPECAgent
     ? [...messages]
     : [
-        { role: "system", content: getCanvasSystemMessage() },
-        ...(projectContextMessage ? [{ role: "system", content: projectContextMessage }] : []),
-        ...messages,
-      ];
+      { role: "system", content: getCanvasSystemMessage() },
+      ...(projectContextMessage ? [{ role: "system", content: projectContextMessage }] : []),
+      ...messages,
+    ];
 
   const employeeContext =
     agent.name === "employee_investment_team"
@@ -382,6 +389,25 @@ export async function POST(req: Request) {
     }
   }
 
+  const llmConfig = await resolveLlmConfigForUser(session.id, {
+    defaultBaseUrl: "https://api.deepseek.com",
+    defaultModel: "deepseek-chat",
+  });
+  const agentExtraEnv: Record<string, string> = {
+    MEMORY_USER_ID: session.id,
+    AGENT_USER_ID: session.id,
+  };
+  if (llmConfig.apiKey) {
+    agentExtraEnv.LLM_API_KEY = llmConfig.apiKey;
+    agentExtraEnv.DEEPSEEK_API_KEY = llmConfig.apiKey;
+  }
+  if (llmConfig.baseUrl) {
+    agentExtraEnv.LLM_BASE_URL = llmConfig.baseUrl;
+  }
+  if (llmConfig.model) {
+    agentExtraEnv.LLM_MODEL = llmConfig.model;
+  }
+
   const agentStream = executeAgent(
     agent.entryPoint,
     {
@@ -391,7 +417,7 @@ export async function POST(req: Request) {
       ...(isPECAgent ? {} : { tools: getCanvasToolsForLLM() }),
       params: Object.keys(agentParams).length > 0 ? agentParams : undefined,
     },
-    isPECAgent ? { extraEnv: { MEMORY_USER_ID: session.id } } : {}
+    { extraEnv: agentExtraEnv }
   );
 
   const chunks: string[] = [];
