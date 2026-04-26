@@ -9,6 +9,15 @@ export interface UserLlmSetting {
     updatedAt: string | null;
 }
 
+export interface UserEmbeddingSetting {
+    apiKey: string | null;
+    model: string | null;
+    baseUrl: string | null;
+    provider: string | null;
+    dimensions: number | null;
+    updatedAt: string | null;
+}
+
 export interface ResolvedLlmConfig {
     apiKey: string;
     model: string;
@@ -53,7 +62,22 @@ async function ensureTable(): Promise<void> {
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
         "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW()
       )
-    `).then(() => undefined);
+    `)
+            .then(async () => {
+                await prisma.$executeRawUnsafe(`
+          CREATE TABLE IF NOT EXISTS "UserEmbeddingSetting" (
+            "userId" TEXT PRIMARY KEY REFERENCES "User"("id") ON DELETE CASCADE,
+            "apiKey" TEXT,
+            "model" TEXT,
+            "baseUrl" TEXT,
+            "provider" TEXT,
+            "dimensions" INTEGER,
+            "createdAt" TIMESTAMP(3) NOT NULL DEFAULT NOW(),
+            "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT NOW()
+          )
+        `);
+            })
+            .then(() => undefined);
     }
     await ensureTablePromise;
 }
@@ -136,12 +160,93 @@ export async function resolveLlmConfigForUser(
     };
 }
 
+export async function getUserEmbeddingSetting(userId: string): Promise<UserEmbeddingSetting> {
+    await ensureTable();
+    const rows = await prisma.$queryRawUnsafe<Array<{
+        apiKey: string | null;
+        model: string | null;
+        baseUrl: string | null;
+        provider: string | null;
+        dimensions: number | null;
+        updatedAt: Date | null;
+    }>>(
+        `SELECT "apiKey", "model", "baseUrl", "provider", "dimensions", "updatedAt"
+     FROM "UserEmbeddingSetting"
+     WHERE "userId" = $1
+     LIMIT 1`,
+        userId
+    );
+
+    const row = rows[0];
+    if (!row) {
+        return {
+            apiKey: null,
+            model: null,
+            baseUrl: null,
+            provider: null,
+            dimensions: null,
+            updatedAt: null,
+        };
+    }
+
+    return {
+        apiKey: normalizeNullable(row.apiKey),
+        model: normalizeNullable(row.model),
+        baseUrl: normalizeNullable(row.baseUrl),
+        provider: normalizeNullable(row.provider),
+        dimensions: typeof row.dimensions === "number" ? row.dimensions : null,
+        updatedAt: row.updatedAt ? row.updatedAt.toISOString() : null,
+    };
+}
+
+export async function saveUserEmbeddingSetting(
+    userId: string,
+    input: {
+        apiKey?: string | null;
+        model?: string | null;
+        baseUrl?: string | null;
+        provider?: string | null;
+        dimensions?: number | null;
+    }
+): Promise<void> {
+    await ensureTable();
+    const apiKey = normalizeNullable(input.apiKey);
+    const model = normalizeNullable(input.model);
+    const baseUrl = normalizeNullable(input.baseUrl);
+    const provider = normalizeNullable(input.provider);
+    const dimensions = Number.isFinite(input.dimensions as number)
+        ? Math.max(1, Math.floor(input.dimensions as number))
+        : null;
+
+    await prisma.$executeRawUnsafe(
+        `INSERT INTO "UserEmbeddingSetting" ("userId", "apiKey", "model", "baseUrl", "provider", "dimensions", "createdAt", "updatedAt")
+     VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+     ON CONFLICT ("userId") DO UPDATE SET
+       "apiKey" = EXCLUDED."apiKey",
+       "model" = EXCLUDED."model",
+       "baseUrl" = EXCLUDED."baseUrl",
+       "provider" = EXCLUDED."provider",
+       "dimensions" = EXCLUDED."dimensions",
+       "updatedAt" = NOW()`,
+        userId,
+        apiKey,
+        model,
+        baseUrl,
+        provider,
+        dimensions
+    );
+}
+
 export async function resolveEmbeddingConfigForUser(
     userId: string
 ): Promise<ResolvedEmbeddingConfig> {
-    const setting = await getUserLlmSetting(userId);
+    const [llmSetting, embeddingSetting] = await Promise.all([
+        getUserLlmSetting(userId),
+        getUserEmbeddingSetting(userId),
+    ]);
 
-    const provider = process.env.EMBEDDING_PROVIDER || "openai";
+    const envProvider = process.env.EMBEDDING_PROVIDER || "openai";
+    const provider = embeddingSetting.provider || envProvider;
     const dimensions = parseInt(process.env.EMBEDDING_DIMENSIONS || "1024", 10);
     const envApiKey =
         process.env.EMBEDDING_API_KEY ||
@@ -160,21 +265,28 @@ export async function resolveEmbeddingConfigForUser(
                 ? "embedding-3"
                 : "text-embedding-3-small");
 
-    // Reuse user LLM key/base_url for embedding when dedicated embedding env is not provided.
-    const apiKey = setting.apiKey || envApiKey;
-    const baseUrl = setting.baseUrl || envBaseUrl;
+    // Priority: embedding user setting > llm user setting > env
+    const apiKey = embeddingSetting.apiKey || llmSetting.apiKey || envApiKey;
+    const baseUrl = embeddingSetting.baseUrl || llmSetting.baseUrl || envBaseUrl;
+    const model = embeddingSetting.model || envModel;
+    const resolvedDimensions =
+        typeof embeddingSetting.dimensions === "number"
+            ? embeddingSetting.dimensions
+            : Number.isFinite(dimensions)
+                ? dimensions
+                : 1024;
 
     return {
         apiKey,
         baseUrl,
-        model: envModel,
+        model,
         provider,
-        dimensions: Number.isFinite(dimensions) ? dimensions : 1024,
+        dimensions: resolvedDimensions,
         source: {
-            apiKey: setting.apiKey ? "user" : envApiKey ? "env" : "none",
-            baseUrl: setting.baseUrl ? "user" : envBaseUrl ? "env" : "none",
-            model: process.env.EMBEDDING_MODEL ? "env" : "none",
-            provider: process.env.EMBEDDING_PROVIDER ? "env" : "none",
+            apiKey: embeddingSetting.apiKey || llmSetting.apiKey ? "user" : envApiKey ? "env" : "none",
+            baseUrl: embeddingSetting.baseUrl || llmSetting.baseUrl ? "user" : envBaseUrl ? "env" : "none",
+            model: embeddingSetting.model ? "user" : process.env.EMBEDDING_MODEL ? "env" : "none",
+            provider: embeddingSetting.provider ? "user" : process.env.EMBEDDING_PROVIDER ? "env" : "none",
         },
     };
 }

@@ -1,6 +1,7 @@
 import { getSession } from "@/lib/auth";
 import { CheckCircle2, Cpu, Monitor, User2 } from "lucide-react";
 import { LlmSettingsPanel } from "@/components/settings/llm-settings-panel";
+import { EmbeddingSettingsPanel } from "@/components/settings/embedding-settings-panel";
 
 export default async function SettingsPage() {
   const session = await getSession();
@@ -112,6 +113,7 @@ export default async function SettingsPage() {
           </section>
 
           <LlmSettingsPanel />
+          <EmbeddingSettingsPanel />
         </div>
       </div>
     </div>
