@@ -29,6 +29,12 @@ interface ToolEventBadgeProps {
   event: ToolEvent;
 }
 
+function formatMs(ms?: number): string {
+  if (typeof ms !== "number" || ms < 0) return "";
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(ms < 10_000 ? 2 : 1)}s`;
+}
+
 export function ToolEventBadge({ event }: ToolEventBadgeProps) {
   const [expanded, setExpanded] = useState(false);
   const displayName = TOOL_DISPLAY_NAMES[event.name] || event.name;
@@ -39,6 +45,8 @@ export function ToolEventBadge({ event }: ToolEventBadgeProps) {
         .map(([k, v]) => `${k}=${typeof v === "string" ? `"${v}"` : JSON.stringify(v)}`)
         .join(", ")
     : "";
+
+  const elapsedLabel = formatMs(event.elapsedMs);
 
   return (
     <div className="font-mono text-xs">
@@ -63,6 +71,9 @@ export function ToolEventBadge({ event }: ToolEventBadgeProps) {
             <span className="text-term-green-dim">← </span>
             <span className="text-term-green">[OK]</span>
             <span className="text-term-green-dim ml-1">{displayName}</span>
+            {elapsedLabel && (
+              <span className="text-term-green-dim/70 ml-1">[{elapsedLabel}]</span>
+            )}
           </>
         )}
         {event.status === "error" && (
@@ -70,6 +81,9 @@ export function ToolEventBadge({ event }: ToolEventBadgeProps) {
             <span className="text-term-red">← </span>
             <span className="text-term-red">[ERR]</span>
             <span className="text-term-red/70 ml-1">{displayName}</span>
+            {elapsedLabel && (
+              <span className="text-term-red/60 ml-1">[{elapsedLabel}]</span>
+            )}
           </>
         )}
       </button>

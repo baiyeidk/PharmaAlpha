@@ -14,6 +14,12 @@ interface PhaseBlockProps {
   block: MessageBlock;
 }
 
+function formatMs(ms?: number): string {
+  if (typeof ms !== "number" || ms < 0) return "";
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(ms < 10_000 ? 2 : 1)}s`;
+}
+
 export function PhaseBlock({ block }: PhaseBlockProps) {
   const phase = block.phase || "unknown";
   const isDone = block.status === "done";
@@ -28,6 +34,7 @@ export function PhaseBlock({ block }: PhaseBlockProps) {
   }, [isDone, phase]);
 
   const displayName = getPhaseDisplayName(phase, block.round);
+  const elapsedLabel = formatMs(block.elapsedMs);
   const timestamp = new Date().toLocaleTimeString("en-US", {
     hour12: false,
     hour: "2-digit",
@@ -64,8 +71,11 @@ export function PhaseBlock({ block }: PhaseBlockProps) {
           </span>
         )}
 
-        <span className="ml-auto shrink-0">
+        <span className="ml-auto shrink-0 flex items-center gap-1.5">
           {isStreaming && <AsciiSpinner variant="braille" className="text-[10px]" />}
+          {elapsedLabel && (
+            <span className="text-[10px] text-term-green-dim/80">[{elapsedLabel}]</span>
+          )}
           {isDone && !hasCheckResult && (
             <span className="text-[10px] text-term-green">[DONE]</span>
           )}

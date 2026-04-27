@@ -18,6 +18,8 @@ OUTPUT (stdout, one JSON object per line):
   {"type": "check",          "passed": true, "summary": "...", "gaps": [...]}
   {"type": "phase_start",    "phase": "plan|execute|check|synthesize", "round": 1}
   {"type": "phase_end",      "phase": "plan|execute|check|synthesize", "round": 1}
+  {"type": "timing",         "phase": "memory_recall|rag_search|plan|execute|check|synthesize|llm_call|tool_call|total",
+                              "round": 1, "elapsed_ms": 1234, "metadata": {...}}
   {"type": "agent_delegate", "agent_name": "...", "task": "..."}
   {"type": "agent_result",   "agent_name": "...", "success": true, "summary": "..."}
   {"type": "result",         "content": "final text...", "metadata": {...}}
@@ -247,6 +249,34 @@ class PhaseEnd:
 
     def to_json(self) -> dict[str, Any]:
         return {"type": self.type, "phase": self.phase, "round": self.round}
+
+
+@dataclass
+class Timing:
+    """Emitted when a phase / sub-step finishes — carries elapsed time for end-to-end latency tracking.
+
+    `phase` is one of:
+      - top-level: memory_recall | rag_search | plan | execute | check | synthesize | total
+      - nested:    llm_call | tool_call
+
+    `metadata` may carry e.g. {"tool_name": "...", "loop": 1, "phase_owner": "execute"}.
+    """
+    phase: str
+    elapsed_ms: int
+    round: int = 0
+    metadata: dict[str, Any] | None = None
+    type: str = "timing"
+
+    def to_json(self) -> dict[str, Any]:
+        d: dict[str, Any] = {
+            "type": self.type,
+            "phase": self.phase,
+            "elapsed_ms": self.elapsed_ms,
+            "round": self.round,
+        }
+        if self.metadata:
+            d["metadata"] = self.metadata
+        return d
 
 
 @dataclass

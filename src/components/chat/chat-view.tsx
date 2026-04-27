@@ -13,6 +13,8 @@ const InfiniteCanvas = dynamic(
   { ssr: false, loading: () => <div className="flex-1 flex items-center justify-center"><div className="h-5 w-5 rounded-full border-2 border-foreground/20 border-t-foreground/60 animate-spin" /></div> },
 );
 import { useChatStream } from "@/hooks/use-chat-stream";
+import { useTimingStats } from "@/hooks/use-timing-stats";
+import { TimingStatsBar } from "./timing-stats-bar";
 import { useAgents } from "@/hooks/use-agents";
 import { useCanvasStore } from "@/stores/canvas-store";
 import type { CanvasNodeType } from "@/stores/canvas-store";
@@ -135,6 +137,8 @@ export function ChatView({ conversationId, projectId, onProjectArtifactSaved }: 
     [onProjectArtifactSaved, projectId]
   );
 
+  const { stats: timingStats, record: recordTiming, clear: clearTimingStats } = useTimingStats();
+
   const { messages, isLoading, sendMessage, stopGeneration } = useChatStream({
     agentId: effectiveAgentId,
     conversationId: activeConvId,
@@ -146,6 +150,14 @@ export function ChatView({ conversationId, projectId, onProjectArtifactSaved }: 
     onToolCall: handleToolCall,
     onStreamEnd: handleStreamEnd,
   });
+
+  useEffect(() => {
+    for (const msg of messages) {
+      if (msg.role !== "assistant" || msg.isStreaming) continue;
+      if (!msg.timingSummary || msg.timingSummary.totalMs <= 0) continue;
+      recordTiming(msg.id, msg.timingSummary);
+    }
+  }, [messages, recordTiming]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -190,6 +202,7 @@ export function ChatView({ conversationId, projectId, onProjectArtifactSaved }: 
 
   const chatTitleRight = (
     <div className="flex items-center gap-2">
+      <TimingStatsBar stats={timingStats} onClear={clearTimingStats} />
       {agents.length > 0 && (
         <Select value={effectiveAgentId} onValueChange={(v) => { if (v) setSelectedAgentId(v); }}>
           <SelectTrigger className="h-6 w-[140px] border-border bg-term-bg-surface text-[11px] rounded-md px-2 py-0 text-muted-foreground font-mono">
@@ -283,7 +296,7 @@ export function ChatView({ conversationId, projectId, onProjectArtifactSaved }: 
               <div>
                 {messages.map((msg) => (
                   <div key={msg.id} className="group relative">
-                    <ChatMessage role={msg.role} content={msg.content} isStreaming={msg.isStreaming} blocks={msg.blocks} />
+                    <ChatMessage role={msg.role} content={msg.content} isStreaming={msg.isStreaming} blocks={msg.blocks} timingSummary={msg.timingSummary} />
                     {projectId && msg.role === "assistant" && !msg.isStreaming && msg.content.trim() && (
                       <button
                         type="button"

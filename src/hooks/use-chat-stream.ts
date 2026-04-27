@@ -9,6 +9,24 @@ export interface ToolEvent {
   args?: Record<string, unknown>;
   status: "running" | "success" | "error";
   result?: string;
+  elapsedMs?: number;
+}
+
+export interface TimingEntry {
+  phase: string;
+  round?: number;
+  elapsedMs: number;
+  metadata?: Record<string, unknown>;
+  receivedAt: number;
+}
+
+export interface TimingSummary {
+  totalMs: number;
+  byPhase: Record<string, number>;
+  perRoundExecuteMs: number[];
+  toolCalls: Array<{ name: string; elapsedMs: number; phaseOwner?: string; success?: boolean }>;
+  llmCalls: Array<{ phaseOwner: string; loop?: number; stream: boolean; elapsedMs: number }>;
+  raw: TimingEntry[];
 }
 
 export interface MessageBlock {
@@ -23,6 +41,7 @@ export interface MessageBlock {
   planSteps?: Array<Record<string, unknown>>;
   checkResult?: { passed: boolean; summary: string; gaps?: string[] };
   status: "streaming" | "done" | "error";
+  elapsedMs?: number;
 }
 
 export interface ChatMessage {
@@ -31,6 +50,8 @@ export interface ChatMessage {
   content: string;
   isStreaming?: boolean;
   blocks?: MessageBlock[];
+  timings?: TimingEntry[];
+  timingSummary?: TimingSummary;
 }
 
 interface UseChatStreamOptions {
@@ -161,6 +182,78 @@ export function useChatStream({
       let receivedAnyChunk = false;
       let receivedVisibleContent = false;
       let streamErrorMessage: string | null = null;
+      const timings: TimingEntry[] = [];
+
+      function buildTimingSummary(entries: TimingEntry[]): TimingSummary {
+        const byPhase: Record<string, number> = {};
+        const perRoundExecuteMs: number[] = [];
+        const toolCalls: TimingSummary["toolCalls"] = [];
+        const llmCalls: TimingSummary["llmCalls"] = [];
+        let totalMs = 0;
+
+        for (const t of entries) {
+          if (t.phase === "total") {
+            totalMs = Math.max(totalMs, t.elapsedMs);
+            continue;
+          }
+          if (t.phase === "execute" && typeof t.round === "number" && t.round > 0) {
+            perRoundExecuteMs[t.round - 1] = t.elapsedMs;
+          }
+          if (t.phase === "tool_call") {
+            toolCalls.push({
+              name: (t.metadata?.tool_name as string) || "tool",
+              elapsedMs: t.elapsedMs,
+              phaseOwner: t.metadata?.phase_owner as string | undefined,
+              success: t.metadata?.success as boolean | undefined,
+            });
+            continue;
+          }
+          if (t.phase === "llm_call") {
+            llmCalls.push({
+              phaseOwner: (t.metadata?.phase_owner as string) || "?",
+              loop: t.metadata?.loop as number | undefined,
+              stream: !!t.metadata?.stream,
+              elapsedMs: t.elapsedMs,
+            });
+            continue;
+          }
+          byPhase[t.phase] = (byPhase[t.phase] || 0) + t.elapsedMs;
+        }
+
+        if (totalMs === 0) {
+          totalMs = Object.values(byPhase).reduce((a, b) => a + b, 0);
+        }
+        return { totalMs, byPhase, perRoundExecuteMs, toolCalls, llmCalls, raw: entries };
+      }
+
+      function applyTimingToBlocks(t: TimingEntry) {
+        const topLevelPhases = new Set([
+          "plan", "execute", "check", "synthesize", "memory_recall", "rag_search",
+        ]);
+        if (topLevelPhases.has(t.phase)) {
+          for (let i = currentBlocks.length - 1; i >= 0; i--) {
+            const b = currentBlocks[i];
+            if (b.type === "phase" && b.phase === t.phase && (t.round ? b.round === t.round : true)) {
+              b.elapsedMs = t.elapsedMs;
+              return;
+            }
+            if (t.phase === "synthesize" && b.type === "supervisor" && b.elapsedMs === undefined) {
+              b.elapsedMs = t.elapsedMs;
+              return;
+            }
+          }
+          return;
+        }
+        if (t.phase === "tool_call") {
+          const targetBlock = getActivePhaseBlock() || currentBlocks[currentBlocks.length - 1];
+          if (!targetBlock) return;
+          const toolName = t.metadata?.tool_name as string | undefined;
+          const ev = [...targetBlock.toolEvents].reverse().find(
+            (e) => e.name === toolName && e.elapsedMs === undefined
+          );
+          if (ev) ev.elapsedMs = t.elapsedMs;
+        }
+      }
 
       function getActivePhaseBlock(): MessageBlock | null {
         if (activePhaseBlock) {
@@ -190,10 +283,17 @@ export function useChatStream({
           .map((b) => b.content)
           .filter(Boolean)
           .join("");
+        const summary = timings.length > 0 ? buildTimingSummary(timings) : undefined;
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
-              ? { ...m, content: fullContent, blocks: [...currentBlocks] }
+              ? {
+                  ...m,
+                  content: fullContent,
+                  blocks: [...currentBlocks],
+                  timings: timings.length > 0 ? [...timings] : undefined,
+                  timingSummary: summary,
+                }
               : m
           )
         );
@@ -412,6 +512,18 @@ export function useChatStream({
                 currentBlocks.forEach((b) => {
                   if (b.status === "streaming") b.status = "done";
                 });
+                updateAssistant();
+              } else if (chunk.type === "timing") {
+                receivedAnyChunk = true;
+                const entry: TimingEntry = {
+                  phase: chunk.phase || "unknown",
+                  round: typeof chunk.round === "number" ? chunk.round : 0,
+                  elapsedMs: typeof chunk.elapsed_ms === "number" ? chunk.elapsed_ms : 0,
+                  metadata: chunk.metadata,
+                  receivedAt: Date.now(),
+                };
+                timings.push(entry);
+                applyTimingToBlocks(entry);
                 updateAssistant();
               } else if (chunk.type === "error") {
                 receivedAnyChunk = true;

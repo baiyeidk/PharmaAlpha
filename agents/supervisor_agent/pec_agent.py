@@ -15,7 +15,7 @@ from base.base_agent import BaseAgent
 from base.protocol import (
     AgentRequest, AgentChunk, AgentResult, AgentError,
     AgentToolStart, AgentToolResult, AgentPlan, AgentCheck,
-    AgentToolCall, PhaseStart, PhaseEnd,
+    AgentToolCall, PhaseStart, PhaseEnd, Timing,
 )
 from base.tools import ToolRegistry
 from base.tools.builtin import (
@@ -127,8 +127,12 @@ class PECAgent(BaseAgent):
 
     def _call_llm_json(
         self, system_prompt: str, messages: list[dict[str, Any]], flog: _LLMFileLogger, phase: str, round_i: int,
-    ) -> dict[str, Any]:
-        """Non-streaming LLM call that returns parsed JSON."""
+    ) -> tuple[dict[str, Any], int]:
+        """Non-streaming LLM call that returns parsed JSON.
+
+        Returns:
+            (parsed_dict, elapsed_ms): parsed JSON object and call latency in ms.
+        """
         model = self._get_model()
         llm = self._get_llm()
 
@@ -136,7 +140,7 @@ class PECAgent(BaseAgent):
 
         flog.log_request(round_i, model, llm_messages, None)
         _log(f"PECAgent {phase} round={round_i} — calling LLM (json)")
-        t0 = time.time()
+        t0 = time.perf_counter()
 
         try:
             resp = llm.chat.completions.create(
@@ -149,11 +153,11 @@ class PECAgent(BaseAgent):
             raise
 
         content = resp.choices[0].message.content or "{}"
-        elapsed = time.time() - t0
+        elapsed = time.perf_counter() - t0
         _log(f"PECAgent {phase} done in {elapsed:.1f}s | len={len(content)}")
         flog.log_response(round_i, content, [], elapsed)
 
-        return self._normalize_llm_json_content(content)
+        return self._normalize_llm_json_content(content), int(elapsed * 1000)
 
     def _run_tool_loop(
         self, system_prompt: str, messages: list[dict[str, Any]],
@@ -171,7 +175,7 @@ class PECAgent(BaseAgent):
         for loop_i in range(MAX_TOOL_LOOPS):
             flog.log_request(round_i, model, llm_messages, tool_schemas)
             _log(f"PECAgent {phase} loop {loop_i+1}/{MAX_TOOL_LOOPS} — calling LLM")
-            t0 = time.time()
+            t0 = time.perf_counter()
 
             try:
                 call_kwargs: dict[str, Any] = {"model": model, "messages": llm_messages, "stream": True}
@@ -212,9 +216,22 @@ class PECAgent(BaseAgent):
                 yield AgentError(content=f"LLM stream error: {e}", code="LLM_STREAM_ERROR")
                 return ""
 
-            elapsed = time.time() - t0
+            elapsed = time.perf_counter() - t0
             _log(f"PECAgent {phase} loop {loop_i+1} done in {elapsed:.1f}s | text={len(collected_content)}ch | tools={len(collected_tool_calls)}")
             flog.log_response(round_i, collected_content, collected_tool_calls, elapsed)
+
+            yield Timing(
+                phase="llm_call",
+                round=round_i,
+                elapsed_ms=int(elapsed * 1000),
+                metadata={
+                    "phase_owner": phase,
+                    "loop": loop_i + 1,
+                    "stream": True,
+                    "text_chars": len(collected_content),
+                    "tool_calls": len(collected_tool_calls),
+                },
+            )
 
             collected_all_text += collected_content
 
@@ -236,14 +253,24 @@ class PECAgent(BaseAgent):
                     fn_args = {}
 
                 _log(f"PECAgent {phase} tool: {fn_name}({list(fn_args.keys())})")
-                t1 = time.time()
+                t1 = time.perf_counter()
                 yield AgentToolStart(name=fn_name, args=fn_args)
                 result_str = registry.execute(fn_name, fn_args)
                 success = self._is_tool_result_success(result_str)
-                tool_elapsed = time.time() - t1
+                tool_elapsed = time.perf_counter() - t1
                 _log(f"PECAgent {phase} tool done: {fn_name} in {tool_elapsed:.1f}s | ok={success}")
                 flog.log_tool_exec(round_i, fn_name, fn_args, result_str, success, tool_elapsed)
                 yield AgentToolResult(name=fn_name, result=result_str, success=success)
+                yield Timing(
+                    phase="tool_call",
+                    round=round_i,
+                    elapsed_ms=int(tool_elapsed * 1000),
+                    metadata={
+                        "phase_owner": phase,
+                        "tool_name": fn_name,
+                        "success": success,
+                    },
+                )
                 status_text = "OK" if success else "ERROR"
                 collected_all_text += f"\n[TOOL:{status_text}] {fn_name}\n{result_str}\n"
 
@@ -342,32 +369,49 @@ class PECAgent(BaseAgent):
             return None
         return "## 短期记忆（本次会话内）\n" + "\n\n".join(parts)
 
-    def _recall_memory(self, user_question: str) -> str | None:
-        """Auto-recall relevant memories for the current query."""
+    def _recall_memory(self, user_question: str) -> tuple[str | None, int]:
+        """Auto-recall relevant memories for the current query.
+
+        Returns:
+            (memory_text_or_None, elapsed_ms): retrieved memory and call latency.
+            elapsed_ms is 0 when skipped (no MEMORY_USER_ID).
+        """
         user_id = os.environ.get("MEMORY_USER_ID", "")
         if not user_id:
-            return None
+            return None, 0
+        t0 = time.perf_counter()
         try:
             from base.tools.builtin.memory_tools import memory_recall
             result = memory_recall(query=user_question, top_k=5)
+            elapsed_ms = int((time.perf_counter() - t0) * 1000)
             if result and result != "[]":
-                _log(f"PECAgent memory recall returned {len(result)} chars")
-                return result
+                _log(f"PECAgent memory recall returned {len(result)} chars in {elapsed_ms}ms")
+                return result, elapsed_ms
+            return None, elapsed_ms
         except Exception as e:
+            elapsed_ms = int((time.perf_counter() - t0) * 1000)
             _log(f"PECAgent memory recall error: {e}")
-        return None
+            return None, elapsed_ms
 
-    def _pre_search_rag(self, user_question: str) -> str | None:
-        """Pre-search RAG knowledge base so Plan knows what data already exists."""
+    def _pre_search_rag(self, user_question: str) -> tuple[str | None, int]:
+        """Pre-search RAG knowledge base so Plan knows what data already exists.
+
+        Returns:
+            (rag_text_or_None, elapsed_ms): retrieved chunks and call latency.
+        """
+        t0 = time.perf_counter()
         try:
             from base.tools.builtin.rag_tools import rag_search
             result = rag_search(query=user_question, top_k=3)
+            elapsed_ms = int((time.perf_counter() - t0) * 1000)
             if result and result != "[]":
-                _log(f"PECAgent RAG pre-search returned {len(result)} chars")
-                return result
+                _log(f"PECAgent RAG pre-search returned {len(result)} chars in {elapsed_ms}ms")
+                return result, elapsed_ms
+            return None, elapsed_ms
         except Exception as e:
+            elapsed_ms = int((time.perf_counter() - t0) * 1000)
             _log(f"PECAgent RAG pre-search error: {e}")
-        return None
+            return None, elapsed_ms
 
     # ── Context helpers ─────────────────────────────────────
 
@@ -394,7 +438,8 @@ class PECAgent(BaseAgent):
 
         session_id = request.session_id or "unknown"
         flog = _LLMFileLogger("PECAgent", str(session_id))
-        session_t0 = time.time()
+        session_t0 = time.perf_counter()
+        session_wall_t0 = time.time()
         _log(f"PECAgent start | log={flog._path.name}")
 
         try:
@@ -425,8 +470,22 @@ class PECAgent(BaseAgent):
         check_feedback: list[str] = []
         all_check_summaries: list[str] = []
 
-        memory_context = self._recall_memory(recall_query)
-        rag_context = self._pre_search_rag(recall_query)
+        memory_context, memory_elapsed_ms = self._recall_memory(recall_query)
+        if memory_elapsed_ms > 0:
+            yield Timing(
+                phase="memory_recall",
+                round=0,
+                elapsed_ms=memory_elapsed_ms,
+                metadata={"hit": memory_context is not None},
+            )
+
+        rag_context, rag_elapsed_ms = self._pre_search_rag(recall_query)
+        yield Timing(
+            phase="rag_search",
+            round=0,
+            elapsed_ms=rag_elapsed_ms,
+            metadata={"hit": rag_context is not None},
+        )
 
         try:
             for round_i in range(1, MAX_PEC_ROUNDS + 1):
@@ -434,6 +493,7 @@ class PECAgent(BaseAgent):
 
                 # ── PLAN ──
                 yield PhaseStart(phase="plan", round=round_i)
+                t_plan = time.perf_counter()
 
                 short_term_memory = self._build_short_term_memory(
                     all_execute_results,
@@ -450,15 +510,30 @@ class PECAgent(BaseAgent):
                     build_plan_prompt(), chat_messages,
                     memory_context=plan_memory_context, rag_context=rag_context,
                 )
-                plan_data = self._call_llm_json(build_plan_prompt(), plan_ctx.build()[1:], flog, "plan", round_i)
+                plan_data, plan_llm_ms = self._call_llm_json(
+                    build_plan_prompt(), plan_ctx.build()[1:], flog, "plan", round_i,
+                )
+                yield Timing(
+                    phase="llm_call",
+                    round=round_i,
+                    elapsed_ms=plan_llm_ms,
+                    metadata={"phase_owner": "plan", "stream": False},
+                )
                 steps = plan_data.get("steps", [])
 
                 yield AgentPlan(steps=steps, reasoning=plan_data.get("reasoning", ""))
+                yield Timing(
+                    phase="plan",
+                    round=round_i,
+                    elapsed_ms=int((time.perf_counter() - t_plan) * 1000),
+                    metadata={"steps": len(steps)},
+                )
                 yield PhaseEnd(phase="plan", round=round_i)
 
                 if not steps:
                     _log("PECAgent no steps planned — direct answer mode")
                     yield PhaseStart(phase="synthesize", round=round_i)
+                    t_synth = time.perf_counter()
                     synth_ctx = self._build_ctx(
                         build_synthesize_prompt(), chat_messages,
                         memory_context=memory_context,
@@ -469,13 +544,27 @@ class PECAgent(BaseAgent):
                         synth_ctx.build()[1:],
                         self._synth_registry, flog, "synthesize", round_i,
                     )
-                    flog.log_finish("completed_no_steps", round_i, time.time() - session_t0)
+                    yield Timing(
+                        phase="synthesize",
+                        round=round_i,
+                        elapsed_ms=int((time.perf_counter() - t_synth) * 1000),
+                        metadata={"path": "no_steps"},
+                    )
+                    total_ms = int((time.perf_counter() - session_t0) * 1000)
+                    yield Timing(
+                        phase="total",
+                        round=round_i,
+                        elapsed_ms=total_ms,
+                        metadata={"path": "no_steps", "session_id": session_id},
+                    )
+                    flog.log_finish("completed_no_steps", round_i, time.time() - session_wall_t0)
                     yield AgentResult(content=synth_text)
                     yield PhaseEnd(phase="synthesize", round=round_i)
                     return
 
                 # ── EXECUTE ──
                 yield PhaseStart(phase="execute", round=round_i)
+                t_exec = time.perf_counter()
 
                 steps_description = "\n".join(f"{s['id']}. {s['description']}" for s in steps)
                 exec_ctx = self._build_ctx(build_execute_prompt(), chat_messages)
@@ -492,17 +581,31 @@ class PECAgent(BaseAgent):
                 )
                 all_execute_results.append(exec_text)
 
+                yield Timing(
+                    phase="execute",
+                    round=round_i,
+                    elapsed_ms=int((time.perf_counter() - t_exec) * 1000),
+                )
                 yield PhaseEnd(phase="execute", round=round_i)
 
                 # ── CHECK ──
                 yield PhaseStart(phase="check", round=round_i)
+                t_check = time.perf_counter()
 
                 check_ctx = self._build_ctx(build_check_prompt(), chat_messages)
                 check_ctx.inject_phase_context(
                     f"用户原始请求：{user_question}",
                     f"执行结果：\n{exec_text}",
                 )
-                check_data = self._call_llm_json(build_check_prompt(), check_ctx.build()[1:], flog, "check", round_i)
+                check_data, check_llm_ms = self._call_llm_json(
+                    build_check_prompt(), check_ctx.build()[1:], flog, "check", round_i,
+                )
+                yield Timing(
+                    phase="llm_call",
+                    round=round_i,
+                    elapsed_ms=check_llm_ms,
+                    metadata={"phase_owner": "check", "stream": False},
+                )
                 passed = check_data.get("passed", True)
                 gaps = check_data.get("gaps", [])
                 check_summary = str(check_data.get("summary", "") or "").strip()
@@ -514,6 +617,12 @@ class PECAgent(BaseAgent):
                 all_check_summaries.append(" | ".join(summary_parts))
 
                 yield AgentCheck(passed=passed, summary=check_data.get("summary", ""), gaps=gaps)
+                yield Timing(
+                    phase="check",
+                    round=round_i,
+                    elapsed_ms=int((time.perf_counter() - t_check) * 1000),
+                    metadata={"passed": bool(passed)},
+                )
                 yield PhaseEnd(phase="check", round=round_i)
 
                 if passed:
@@ -525,6 +634,7 @@ class PECAgent(BaseAgent):
 
             # ── SYNTHESIZE ──
             yield PhaseStart(phase="synthesize", round=round_i)
+            t_synth = time.perf_counter()
 
             synth_ctx = self._build_ctx(
                 build_synthesize_prompt(), chat_messages,
@@ -541,7 +651,19 @@ class PECAgent(BaseAgent):
                 self._synth_registry, flog, "synthesize", round_i,
             )
 
-            flog.log_finish("completed", round_i, time.time() - session_t0)
+            yield Timing(
+                phase="synthesize",
+                round=round_i,
+                elapsed_ms=int((time.perf_counter() - t_synth) * 1000),
+            )
+            total_ms = int((time.perf_counter() - session_t0) * 1000)
+            yield Timing(
+                phase="total",
+                round=round_i,
+                elapsed_ms=total_ms,
+                metadata={"session_id": session_id, "rounds": round_i},
+            )
+            flog.log_finish("completed", round_i, time.time() - session_wall_t0)
             yield AgentResult(content=synth_text)
             yield PhaseEnd(phase="synthesize", round=round_i)
 

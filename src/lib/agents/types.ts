@@ -30,7 +30,8 @@ export interface AgentOutputChunk {
     | "agent_delegate"
     | "agent_result"
     | "phase_start"
-    | "phase_end";
+    | "phase_end"
+    | "timing";
   content?: string;
   name?: string;
   args?: Record<string, unknown>;
@@ -48,6 +49,7 @@ export interface AgentOutputChunk {
   task?: string;
   phase?: string;
   round?: number;
+  elapsed_ms?: number;
 }
 
 export interface AgentMeta {

@@ -4,17 +4,25 @@ import { MarkdownRenderer } from "./markdown-renderer";
 import { AgentBlock } from "./agent-block";
 import { PhaseBlock } from "./phase-block";
 import { ToolEventBadge } from "./tool-event-badge";
+import { TimingPanel } from "./timing-panel";
 import { AsciiDivider } from "@/components/terminal/ascii-divider";
-import type { MessageBlock } from "@/hooks/use-chat-stream";
+import type { MessageBlock, TimingSummary } from "@/hooks/use-chat-stream";
 
 interface ChatMessageProps {
   role: "user" | "assistant" | "system";
   content: string;
   isStreaming?: boolean;
   blocks?: MessageBlock[];
+  timingSummary?: TimingSummary;
 }
 
-export function ChatMessage({ role, content, isStreaming, blocks }: ChatMessageProps) {
+export function ChatMessage({
+  role,
+  content,
+  isStreaming,
+  blocks,
+  timingSummary,
+}: ChatMessageProps) {
   const isUser = role === "user";
 
   if (isUser) {
@@ -60,6 +68,10 @@ export function ChatMessage({ role, content, isStreaming, blocks }: ChatMessageP
           )}
         </div>
       ) : null}
+
+      {timingSummary && (timingSummary.totalMs > 0 || timingSummary.llmCalls.length > 0) && (
+        <TimingPanel summary={timingSummary} />
+      )}
 
       <AsciiDivider variant="dots" className="mt-3 opacity-30" />
     </div>
