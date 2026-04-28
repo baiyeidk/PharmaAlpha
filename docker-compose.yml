@@ -37,8 +37,10 @@ services:
       db:
         condition: service_healthy
     volumes:
-      - agent-logs:/app/agents/logs
+      # Bind-mount agent logs to the host so they're directly readable
+      # from the IDE (e.g. open .jsonl in VS Code/Cursor) without
+      # `docker compose cp`. Path is gitignored.
+      - ./agents/logs:/app/agents/logs
 
 volumes:
   pgdata:
-  agent-logs:
