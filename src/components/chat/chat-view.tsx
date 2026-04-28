@@ -296,7 +296,16 @@ export function ChatView({ conversationId, projectId, onProjectArtifactSaved }: 
               <div>
                 {messages.map((msg) => (
                   <div key={msg.id} className="group relative">
-                    <ChatMessage role={msg.role} content={msg.content} isStreaming={msg.isStreaming} blocks={msg.blocks} timingSummary={msg.timingSummary} tokenSummary={msg.tokenSummary} />
+                    <ChatMessage
+                      role={msg.role}
+                      content={msg.content}
+                      isStreaming={msg.isStreaming}
+                      blocks={msg.blocks}
+                      timingSummary={msg.timingSummary}
+                      tokenSummary={msg.tokenSummary}
+                      errors={msg.errors}
+                      agentLogs={msg.agentLogs}
+                    />
                     {projectId && msg.role === "assistant" && !msg.isStreaming && msg.content.trim() && (
                       <button
                         type="button"

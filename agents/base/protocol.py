@@ -26,7 +26,10 @@ OUTPUT (stdout, one JSON object per line):
   {"type": "agent_delegate", "agent_name": "...", "task": "..."}
   {"type": "agent_result",   "agent_name": "...", "success": true, "summary": "..."}
   {"type": "result",         "content": "final text...", "metadata": {...}}
-  {"type": "error",          "content": "error message", "code": "ERROR_CODE"}
+  {"type": "error",          "content": "error message", "code": "ERROR_CODE",
+                              "phase": "plan|execute|check|synthesize|...", "traceback": "...",
+                              "details": {...}}
+  {"type": "agent_log",      "message": "...", "level": "info|warn|error", "source": "stderr"}
 """
 
 from __future__ import annotations
@@ -160,12 +163,58 @@ class AgentResult:
 
 @dataclass
 class AgentError:
+    """Agent error event.
+
+    `phase` indicates which PEC stage the error occurred in (plan / execute /
+    check / synthesize), so the frontend can attribute the error to a specific
+    block and keep all preceding context visible.
+
+    `traceback` carries a Python traceback (or an empty string) and is rendered
+    as a collapsible section in the UI for diagnostic purposes.
+
+    `details` carries arbitrary structured context (round, loop, tool name,
+    HTTP status, model, etc.) without bloating the human-facing message.
+    """
     content: str
     code: str = "AGENT_ERROR"
+    phase: str = ""
+    traceback: str = ""
+    details: dict[str, Any] = field(default_factory=dict)
     type: str = "error"
 
     def to_json(self) -> dict[str, Any]:
-        return {"type": self.type, "content": self.content, "code": self.code}
+        out: dict[str, Any] = {
+            "type": self.type,
+            "content": self.content,
+            "code": self.code,
+        }
+        if self.phase:
+            out["phase"] = self.phase
+        if self.traceback:
+            out["traceback"] = self.traceback
+        if self.details:
+            out["details"] = self.details
+        return out
+
+
+@dataclass
+class AgentLog:
+    """Best-effort forwarding of stderr lines so the UI can show them on
+    demand. Useful when the agent writes informational logs or tracebacks to
+    stderr but does not yield a structured AgentError.
+    """
+    message: str
+    level: str = "info"  # info | warn | error
+    source: str = "stderr"
+    type: str = "agent_log"
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "type": self.type,
+            "message": self.message,
+            "level": self.level,
+            "source": self.source,
+        }
 
 
 # ── Extended protocol events (function calling & multi-agent) ──

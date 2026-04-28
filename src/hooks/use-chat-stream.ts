@@ -79,10 +79,46 @@ export interface MessageBlock {
   planSteps?: Array<Record<string, unknown>>;
   checkResult?: { passed: boolean; summary: string; gaps?: string[] };
   status: "streaming" | "done" | "error";
+  /** Error attached to this block (set when an `error` event occurs while
+   * the block is streaming). Surfaced inline by `<PhaseBlock>` etc. */
+  errorMessage?: string;
+  errorCode?: string;
   elapsedMs?: number;
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
+}
+
+export type MessageErrorSeverity = "fatal" | "warning";
+
+export interface MessageError {
+  id: string;
+  code: string;
+  /** Human-readable error message (the `content` field of the protocol). */
+  content: string;
+  /** Which PEC stage this came from: plan / execute / check / synthesize /
+   * bootstrap / transport / fatal. */
+  phase?: string;
+  traceback?: string;
+  details?: Record<string, unknown>;
+  /** Which block (by id) was active when the error happened. */
+  blockId?: string;
+  /** "fatal" terminates the turn; "warning" is non-blocking (e.g. memory
+   * extraction failed but result still arrived). */
+  severity: MessageErrorSeverity;
+  /** When we received this event (ms epoch). */
+  receivedAt: number;
+  /** Source: agent (from Python), transport (executor / spawn), api (Next.js
+   * route), client (fetch / abort). Used purely for display grouping. */
+  source: "agent" | "transport" | "api" | "client";
+}
+
+export interface AgentLogLine {
+  id: string;
+  message: string;
+  level: "info" | "warn" | "error";
+  source: string;
+  receivedAt: number;
 }
 
 export interface ChatMessage {
@@ -95,6 +131,12 @@ export interface ChatMessage {
   timingSummary?: TimingSummary;
   tokens?: TokenUsageEntry[];
   tokenSummary?: TokenUsageSummary;
+  /** Errors emitted during this assistant turn. Multiple errors are kept
+   * (e.g. plan failed → recovered → synthesize failed). Empty / absent when
+   * the turn finished cleanly. */
+  errors?: MessageError[];
+  /** stderr / informational logs forwarded by the executor. Bounded. */
+  agentLogs?: AgentLogLine[];
 }
 
 interface UseChatStreamOptions {
@@ -224,9 +266,11 @@ export function useChatStream({
       let activePhaseBlock: string | null = null;
       let receivedAnyChunk = false;
       let receivedVisibleContent = false;
-      let streamErrorMessage: string | null = null;
       const timings: TimingEntry[] = [];
       const tokens: TokenUsageEntry[] = [];
+      const messageErrors: MessageError[] = [];
+      const agentLogs: AgentLogLine[] = [];
+      const MAX_AGENT_LOGS = 200;
 
       function buildTokenSummary(entries: TokenUsageEntry[]): TokenUsageSummary {
         const summary: TokenUsageSummary = {
@@ -417,6 +461,8 @@ export function useChatStream({
                   timingSummary: tSummary,
                   tokens: tokens.length > 0 ? [...tokens] : undefined,
                   tokenSummary: tokSummary,
+                  errors: messageErrors.length > 0 ? [...messageErrors] : undefined,
+                  agentLogs: agentLogs.length > 0 ? [...agentLogs] : undefined,
                 }
               : m
           )
@@ -451,7 +497,34 @@ export function useChatStream({
         });
 
         if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
+          // Try to extract a structured error message from the API response
+          // body so the UI can show something meaningful instead of "HTTP 500".
+          let serverMessage = "";
+          let serverDetails: Record<string, unknown> | undefined;
+          try {
+            const ct = res.headers.get("content-type") || "";
+            if (ct.includes("application/json")) {
+              const j = (await res.json()) as Record<string, unknown>;
+              serverMessage = (j.error as string) || (j.message as string) || "";
+              serverDetails = j;
+            } else {
+              serverMessage = (await res.text()).slice(0, 500);
+            }
+          } catch {
+            // best-effort
+          }
+          messageErrors.push({
+            id: createId("err"),
+            code: `HTTP_${res.status}`,
+            content: serverMessage || `HTTP ${res.status} ${res.statusText}`,
+            details: serverDetails,
+            severity: "fatal",
+            receivedAt: Date.now(),
+            source: "api",
+          });
+          // Make sure the error is rendered, then bail out cleanly.
+          updateAssistant();
+          return;
         }
 
         const reader = res.body?.getReader();
@@ -666,14 +739,61 @@ export function useChatStream({
                 updateAssistant();
               } else if (chunk.type === "error") {
                 receivedAnyChunk = true;
-                streamErrorMessage = chunk.content || "Agent returned an unknown error.";
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantId
-                      ? { ...m, content: `Error: ${streamErrorMessage}`, isStreaming: false }
-                      : m
-                  )
-                );
+                const code = (chunk.code as string) || "AGENT_ERROR";
+                const phase = (chunk.phase as string) || undefined;
+                const transportCodes = new Set([
+                  "TIMEOUT",
+                  "EXIT_ERROR",
+                  "SPAWN_ERROR",
+                ]);
+                const sourceForCode: MessageError["source"] = transportCodes.has(code)
+                  ? "transport"
+                  : "agent";
+                const activeBlock = getActivePhaseBlock();
+                const err: MessageError = {
+                  id: createId("err"),
+                  code,
+                  content: chunk.content || "Agent returned an unknown error.",
+                  phase,
+                  traceback: typeof chunk.traceback === "string" ? chunk.traceback : undefined,
+                  details:
+                    chunk.details && typeof chunk.details === "object"
+                      ? (chunk.details as Record<string, unknown>)
+                      : undefined,
+                  blockId: activeBlock?.id,
+                  severity: "fatal",
+                  receivedAt: Date.now(),
+                  source: sourceForCode,
+                };
+                messageErrors.push(err);
+
+                // Mark the active block as failed so the user can see
+                // exactly which phase blew up — but DO NOT clear blocks or
+                // content, the previous reasoning stays visible.
+                if (activeBlock && activeBlock.status === "streaming") {
+                  activeBlock.status = "error";
+                  activeBlock.errorMessage = err.content;
+                  activeBlock.errorCode = code;
+                }
+                updateAssistant();
+              } else if (chunk.type === "agent_log") {
+                // stderr line forwarded by the executor — informational, but
+                // surface error-level lines into the panel by default.
+                const lvl =
+                  chunk.level === "error" || chunk.level === "warn" || chunk.level === "info"
+                    ? chunk.level
+                    : "info";
+                agentLogs.push({
+                  id: createId("log"),
+                  message: typeof chunk.message === "string" ? chunk.message : "",
+                  level: lvl,
+                  source: typeof chunk.source === "string" ? chunk.source : "stderr",
+                  receivedAt: Date.now(),
+                });
+                if (agentLogs.length > MAX_AGENT_LOGS) {
+                  agentLogs.splice(0, agentLogs.length - MAX_AGENT_LOGS);
+                }
+                updateAssistant();
               }
             } catch {
               // skip malformed chunks
@@ -681,43 +801,50 @@ export function useChatStream({
           }
         }
 
-        // Agent stream ended without explicit result/error content:
-        // provide a visible fallback so the user can perceive completion failure.
-        if (!streamErrorMessage && (!receivedAnyChunk || !receivedVisibleContent)) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId
-                ? {
-                    ...m,
-                    content: "Agent未返回有效内容，可能已中断或失败，请重试。",
-                    isStreaming: false,
-                  }
-                : m
-            )
-          );
+        // Agent stream ended without explicit result/error content: surface a
+        // visible fallback. We treat this as a non-fatal warning since the
+        // request technically succeeded at the HTTP layer.
+        if (messageErrors.length === 0 && (!receivedAnyChunk || !receivedVisibleContent)) {
+          messageErrors.push({
+            id: createId("err"),
+            code: "EMPTY_STREAM",
+            content: "Agent 未返回任何可见内容，可能已中断或失败，请重试。",
+            severity: "fatal",
+            receivedAt: Date.now(),
+            source: "client",
+          });
+          updateAssistant();
         }
       } catch (err) {
+        const isAbort = (err as Error).name === "AbortError";
+        const message = err instanceof Error ? err.message : String(err);
         console.error("[chat-stream] fetch failed", {
           debugId,
-          error: err instanceof Error ? err.message : String(err),
+          error: message,
+          aborted: isAbort,
         });
-        if ((err as Error).name === "AbortError") {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId
-                ? { ...m, content: "已停止生成。", isStreaming: false }
-                : m
-            )
-          );
+        if (isAbort) {
+          // User-initiated stop — note it on the message but keep blocks.
+          messageErrors.push({
+            id: createId("err"),
+            code: "USER_ABORT",
+            content: "已停止生成。",
+            severity: "warning",
+            receivedAt: Date.now(),
+            source: "client",
+          });
         } else {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId
-                ? { ...m, content: "Failed to get response. Please try again.", isStreaming: false }
-                : m
-            )
-          );
+          messageErrors.push({
+            id: createId("err"),
+            code: "NETWORK_ERROR",
+            content: `请求失败：${message}`,
+            details: { error: message },
+            severity: "fatal",
+            receivedAt: Date.now(),
+            source: "client",
+          });
         }
+        updateAssistant();
       } finally {
         console.info("[chat-stream] request finished", { debugId });
         setMessages((prev) =>

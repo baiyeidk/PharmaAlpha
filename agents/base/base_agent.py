@@ -20,7 +20,7 @@ from abc import ABC, abstractmethod
 from typing import Generator, Any, Union
 
 from .protocol import (
-    AgentRequest, AgentChunk, AgentToolCall, AgentResult, AgentError,
+    AgentRequest, AgentChunk, AgentToolCall, AgentResult, AgentError, AgentLog,
     AgentToolStart, AgentToolResult, AgentPlan, AgentCheck,
     AgentAgentChunk, AgentDelegate, AgentDelegateResult,
     PhaseStart, PhaseEnd,
@@ -51,18 +51,28 @@ class BaseAgent(ABC):
                 self._emit(output)
 
         except json.JSONDecodeError as e:
-            self._emit(AgentError(content=f"Invalid JSON input: {e}"))
+            self._emit(
+                AgentError(
+                    content=f"Invalid JSON input: {e}",
+                    code="INPUT_DECODE_ERROR",
+                    details={"exception_type": type(e).__name__},
+                )
+            )
         except Exception as e:
+            tb = traceback.format_exc()
             self._emit(
                 AgentError(
                     content=f"Agent execution error: {e}",
                     code="EXECUTION_ERROR",
+                    traceback=tb,
+                    details={"exception_type": type(e).__name__},
                 )
             )
-            sys.stderr.write(traceback.format_exc())
+            sys.stderr.write(tb)
+            sys.exit(1)
 
     AgentOutput = Union[
-        AgentChunk, AgentToolCall, AgentResult, AgentError,
+        AgentChunk, AgentToolCall, AgentResult, AgentError, AgentLog,
         AgentToolStart, AgentToolResult, AgentPlan, AgentCheck,
         AgentAgentChunk, AgentDelegate, AgentDelegateResult,
         PhaseStart, PhaseEnd,

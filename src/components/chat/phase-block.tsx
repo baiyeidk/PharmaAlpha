@@ -31,14 +31,19 @@ export function PhaseBlock({ block }: PhaseBlockProps) {
   const phase = block.phase || "unknown";
   const isDone = block.status === "done";
   const isStreaming = block.status === "streaming";
+  const isError = block.status === "error";
 
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
-    if (isDone && phase !== "check") {
+    // Auto-collapse done phases (except check, which carries pass/fail info).
+    // Always expand error phases so the user can see what went wrong.
+    if (isError) {
+      setCollapsed(false);
+    } else if (isDone && phase !== "check") {
       setCollapsed(true);
     }
-  }, [isDone, phase]);
+  }, [isDone, isError, phase]);
 
   const displayName = getPhaseDisplayName(phase, block.round);
   const elapsedLabel = formatMs(block.elapsedMs);
@@ -87,6 +92,9 @@ export function PhaseBlock({ block }: PhaseBlockProps) {
           {elapsedLabel && (
             <span className="text-[10px] text-term-green-dim/80">[{elapsedLabel}]</span>
           )}
+          {isError && (
+            <span className="text-[10px] text-term-red font-bold">[ERR]</span>
+          )}
           {isDone && !hasCheckResult && (
             <span className="text-[10px] text-term-green">[DONE]</span>
           )}
@@ -98,6 +106,15 @@ export function PhaseBlock({ block }: PhaseBlockProps) {
           )}
         </span>
       </button>
+
+      {isError && block.errorMessage && (
+        <div className="ml-5 mt-1 rounded border border-term-red/30 bg-term-red/5 px-2 py-1 text-[11px] text-term-red/90 break-words">
+          <span className="text-[10px] font-bold mr-1">
+            [{block.errorCode || "ERR"}]
+          </span>
+          {block.errorMessage}
+        </div>
+      )}
 
       {!collapsed && hasBody && (
         <div className="ml-5 border-l border-term-green/10 pl-3 space-y-1">

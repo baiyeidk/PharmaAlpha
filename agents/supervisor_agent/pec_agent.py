@@ -239,8 +239,21 @@ class PECAgent(BaseAgent):
                     call_kwargs["tools"] = tool_schemas
                 stream = llm.chat.completions.create(**call_kwargs)
             except Exception as e:
+                import traceback as _tb
+                tb_str = _tb.format_exc()
                 flog.log_error(f"{phase} LLM error: {e}")
-                yield AgentError(content=f"LLM API error: {e}", code="LLM_ERROR")
+                yield AgentError(
+                    content=f"LLM API error: {e}",
+                    code="LLM_ERROR",
+                    phase=phase,
+                    traceback=tb_str,
+                    details={
+                        "exception_type": type(e).__name__,
+                        "round": round_i,
+                        "loop": loop_i + 1,
+                        "model": model,
+                    },
+                )
                 return ""
 
             collected_content = ""
@@ -272,8 +285,22 @@ class PECAgent(BaseAgent):
                                 if tc_delta.function.arguments:
                                     entry["arguments"] += tc_delta.function.arguments
             except Exception as e:
+                import traceback as _tb
+                tb_str = _tb.format_exc()
                 flog.log_error(f"{phase} stream error: {e}")
-                yield AgentError(content=f"LLM stream error: {e}", code="LLM_STREAM_ERROR")
+                yield AgentError(
+                    content=f"LLM stream error: {e}",
+                    code="LLM_STREAM_ERROR",
+                    phase=phase,
+                    traceback=tb_str,
+                    details={
+                        "exception_type": type(e).__name__,
+                        "round": round_i,
+                        "loop": loop_i + 1,
+                        "model": model,
+                        "partial_text_chars": len(collected_content),
+                    },
+                )
                 return ""
 
             elapsed = time.perf_counter() - t0
@@ -514,7 +541,11 @@ class PECAgent(BaseAgent):
 
     def execute(self, request: AgentRequest) -> Generator[BaseAgent.AgentOutput, None, None]:
         if not request.messages:
-            yield AgentError(content="No messages provided")
+            yield AgentError(
+                content="No messages provided",
+                code="INPUT_ERROR",
+                phase="bootstrap",
+            )
             return
 
         session_id = request.session_id or "unknown"
@@ -526,7 +557,12 @@ class PECAgent(BaseAgent):
         try:
             self._get_llm()
         except ValueError as e:
-            yield AgentError(content=str(e), code="CONFIG_ERROR")
+            yield AgentError(
+                content=str(e),
+                code="CONFIG_ERROR",
+                phase="bootstrap",
+                details={"exception_type": type(e).__name__},
+            )
             return
 
         user_question = request.messages[-1].get("content", "") if request.messages else ""
@@ -777,8 +813,16 @@ class PECAgent(BaseAgent):
             yield PhaseEnd(phase="synthesize", round=round_i)
 
         except Exception as e:
+            import traceback as _tb
+            tb_str = _tb.format_exc()
             _log(f"PECAgent fatal error: {e}")
-            flog.log_error(f"Fatal: {e}")
-            yield AgentError(content=f"Agent error: {e}", code="PEC_ERROR")
+            flog.log_error(f"Fatal: {e}\n{tb_str}")
+            yield AgentError(
+                content=f"Agent error: {e}",
+                code="PEC_ERROR",
+                phase="fatal",
+                traceback=tb_str,
+                details={"exception_type": type(e).__name__},
+            )
         finally:
             flog.close()

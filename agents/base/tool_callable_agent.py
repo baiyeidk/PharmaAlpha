@@ -241,9 +241,15 @@ class ToolCallableAgent(BaseAgent):
     def execute(
         self, request: AgentRequest
     ) -> Generator[BaseAgent.AgentOutput, None, None]:
+        import traceback as _tb
+
         messages = request.messages
         if not messages:
-            yield AgentError(content="No messages provided")
+            yield AgentError(
+                content="No messages provided",
+                code="INPUT_ERROR",
+                phase="bootstrap",
+            )
             return
 
         system_prompt = self.get_system_prompt()
@@ -263,7 +269,12 @@ class ToolCallableAgent(BaseAgent):
         try:
             llm = self._get_llm()
         except ValueError as e:
-            yield AgentError(content=str(e), code="CONFIG_ERROR")
+            yield AgentError(
+                content=str(e),
+                code="CONFIG_ERROR",
+                phase="bootstrap",
+                details={"exception_type": type(e).__name__},
+            )
             return
 
         agent_label = self.__class__.__name__
@@ -290,11 +301,20 @@ class ToolCallableAgent(BaseAgent):
 
                     stream = llm.chat.completions.create(**call_kwargs)
                 except Exception as e:
+                    tb_str = _tb.format_exc()
                     _log(f"{agent_label} LLM error: {e}")
                     flog.log_error(f"LLM API error: {type(e).__name__}: {e}")
                     yield AgentError(
                         content=f"LLM API error: {type(e).__name__}: {e}",
                         code="LLM_ERROR",
+                        phase="execute",
+                        traceback=tb_str,
+                        details={
+                            "exception_type": type(e).__name__,
+                            "loop": loop_i + 1,
+                            "model": model,
+                            "agent": agent_label,
+                        },
                     )
                     return
 
@@ -328,10 +348,20 @@ class ToolCallableAgent(BaseAgent):
                                         entry["arguments"] += tc_delta.function.arguments
 
                 except Exception as e:
+                    tb_str = _tb.format_exc()
                     flog.log_error(f"LLM streaming error: {type(e).__name__}: {e}")
                     yield AgentError(
                         content=f"LLM streaming error: {type(e).__name__}: {e}",
                         code="LLM_STREAM_ERROR",
+                        phase="execute",
+                        traceback=tb_str,
+                        details={
+                            "exception_type": type(e).__name__,
+                            "loop": loop_i + 1,
+                            "model": model,
+                            "agent": agent_label,
+                            "partial_text_chars": len(collected_content),
+                        },
                     )
                     return
 
@@ -386,6 +416,8 @@ class ToolCallableAgent(BaseAgent):
             yield AgentError(
                 content=f"Tool loop limit reached ({max_loops} iterations). Stopping.",
                 code="TOOL_LOOP_LIMIT",
+                phase="execute",
+                details={"max_loops": max_loops, "agent": agent_label},
             )
         finally:
             flog.close()

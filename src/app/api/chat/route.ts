@@ -452,7 +452,15 @@ export async function POST(req: Request) {
   );
 
   const chunks: string[] = [];
-  let lastErrorContent: string | null = null;
+  // Accumulate ALL errors instead of overwriting; this preserves diagnostic
+  // context when the agent emits multiple errors (e.g. plan ok, execute fails,
+  // synthesize fails again).
+  const errors: Array<{
+    code: string;
+    content: string;
+    phase?: string;
+    details?: Record<string, unknown>;
+  }> = [];
 
   const captureAndForward = new TransformStream<AgentOutputChunk, AgentOutputChunk>({
     async transform(chunk, controller) {
@@ -466,6 +474,7 @@ export async function POST(req: Request) {
         "tool_start", "tool_result", "plan", "check",
         "agent_chunk", "agent_delegate", "agent_result",
         "phase_start", "phase_end", "timing", "token_usage",
+        "agent_log",
       ]);
       if (passthroughTypes.has(chunk.type)) {
         controller.enqueue({ ...chunk, metadata: { ...chunk.metadata, conversationId: convId } });
@@ -475,23 +484,65 @@ export async function POST(req: Request) {
       if ((chunk.type === "chunk" || chunk.type === "result") && chunk.content) {
         chunks.push(chunk.content);
       }
-      if (chunk.type === "error" && chunk.content) {
-        lastErrorContent = chunk.content;
+      if (chunk.type === "error" && (chunk.content || chunk.code)) {
+        errors.push({
+          code: chunk.code || "AGENT_ERROR",
+          content: chunk.content || "",
+          phase: chunk.phase,
+          details: chunk.details,
+        });
+        if (chunk.code) {
+          console.warn(
+            `[api/chat] agent error debugId=${debugId} code=${chunk.code} phase=${chunk.phase || "?"}: ${(chunk.content || "").slice(0, 200)}`,
+          );
+        }
       }
       controller.enqueue({ ...chunk, metadata: { ...chunk.metadata, conversationId: convId } });
     },
     async flush() {
       const fullContent = chunks.join("");
-      if (fullContent || lastErrorContent) {
-        const persistedContent = fullContent || `Error: ${lastErrorContent}`;
-        await prisma.message.create({
-          data: {
-            role: "assistant",
-            content: persistedContent,
-            conversationId: convId!,
-            agentId: agent.id,
-          },
-        });
+
+      // Build the persisted assistant message:
+      //   - If we got real content: keep it, append a footer noting any errors
+      //     (so the user can still browse what worked and see what broke).
+      //   - If we got nothing but errors: persist a structured error message
+      //     instead of a single naked "Error: ..." line.
+      let persistedContent: string | null = null;
+      if (fullContent && errors.length === 0) {
+        persistedContent = fullContent;
+      } else if (fullContent && errors.length > 0) {
+        const footer = errors
+          .map(
+            (e) =>
+              `- [${e.code}${e.phase ? ` @ ${e.phase}` : ""}] ${e.content}`,
+          )
+          .join("\n");
+        persistedContent = `${fullContent}\n\n---\n[Agent reported ${errors.length} error(s) during this turn]\n${footer}`;
+      } else if (errors.length > 0) {
+        const lines = errors
+          .map(
+            (e) =>
+              `[${e.code}${e.phase ? ` @ ${e.phase}` : ""}] ${e.content}`,
+          )
+          .join("\n");
+        persistedContent = `Agent failed without producing visible output:\n${lines}`;
+      }
+
+      if (persistedContent) {
+        try {
+          await prisma.message.create({
+            data: {
+              role: "assistant",
+              content: persistedContent,
+              conversationId: convId!,
+              agentId: agent.id,
+            },
+          });
+        } catch (err) {
+          // Don't let a DB failure swallow the entire response stream — log
+          // and continue. The user already received the agent output.
+          console.error(`[api/chat] failed to persist assistant message debugId=${debugId}:`, err);
+        }
         if (isPECAgent && fullContent) {
           try {
             await Promise.race([

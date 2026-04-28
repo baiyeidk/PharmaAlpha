@@ -1,8 +1,10 @@
 from .base_agent import BaseAgent
-from .protocol import AgentRequest, AgentChunk, AgentToolCall, AgentResult, AgentError
+from .protocol import (
+    AgentRequest, AgentChunk, AgentToolCall, AgentResult, AgentError, AgentLog,
+)
 from .canvas_api import CanvasAPI
 
 __all__ = [
     "BaseAgent", "AgentRequest", "AgentChunk", "AgentToolCall",
-    "AgentResult", "AgentError", "CanvasAPI",
+    "AgentResult", "AgentError", "AgentLog", "CanvasAPI",
 ]

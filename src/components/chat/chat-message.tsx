@@ -5,8 +5,15 @@ import { AgentBlock } from "./agent-block";
 import { PhaseBlock } from "./phase-block";
 import { ToolEventBadge } from "./tool-event-badge";
 import { TimingPanel } from "./timing-panel";
+import { ErrorBlock } from "./error-block";
 import { AsciiDivider } from "@/components/terminal/ascii-divider";
-import type { MessageBlock, TimingSummary, TokenUsageSummary } from "@/hooks/use-chat-stream";
+import type {
+  MessageBlock,
+  TimingSummary,
+  TokenUsageSummary,
+  MessageError,
+  AgentLogLine,
+} from "@/hooks/use-chat-stream";
 
 interface ChatMessageProps {
   role: "user" | "assistant" | "system";
@@ -15,6 +22,8 @@ interface ChatMessageProps {
   blocks?: MessageBlock[];
   timingSummary?: TimingSummary;
   tokenSummary?: TokenUsageSummary;
+  errors?: MessageError[];
+  agentLogs?: AgentLogLine[];
 }
 
 export function ChatMessage({
@@ -24,6 +33,8 @@ export function ChatMessage({
   blocks,
   timingSummary,
   tokenSummary,
+  errors,
+  agentLogs,
 }: ChatMessageProps) {
   const isUser = role === "user";
 
@@ -70,6 +81,16 @@ export function ChatMessage({
           )}
         </div>
       ) : null}
+
+      {errors && errors.length > 0 && (
+        <ErrorBlock errors={errors} logs={agentLogs} />
+      )}
+
+      {/* Even when there are no fatal errors, surface error/warn-level stderr
+          lines so silent failures don't go unnoticed. */}
+      {(!errors || errors.length === 0) && agentLogs && agentLogs.some(
+        (l) => l.level === "error" || l.level === "warn",
+      ) && <ErrorBlock errors={[]} logs={agentLogs} />}
 
       {timingSummary && (timingSummary.totalMs > 0 || timingSummary.llmCalls.length > 0) && (
         <TimingPanel summary={timingSummary} tokenSummary={tokenSummary} />

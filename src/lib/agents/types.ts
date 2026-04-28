@@ -22,6 +22,7 @@ export interface AgentOutputChunk {
     | "tool_call"
     | "result"
     | "error"
+    | "agent_log"
     | "tool_start"
     | "tool_result"
     | "plan"
@@ -55,6 +56,13 @@ export interface AgentOutputChunk {
   completion_tokens?: number;
   total_tokens?: number;
   cached_tokens?: number;
+  // Error-context (carried by `error` events)
+  traceback?: string;
+  details?: Record<string, unknown>;
+  // agent_log payload
+  message?: string;
+  level?: "info" | "warn" | "error";
+  source?: string;
 }
 
 export interface AgentMeta {
