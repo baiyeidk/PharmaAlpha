@@ -20,6 +20,13 @@ function formatMs(ms?: number): string {
   return `${(ms / 1000).toFixed(ms < 10_000 ? 2 : 1)}s`;
 }
 
+function formatTokens(n?: number): string {
+  if (typeof n !== "number" || n <= 0) return "";
+  if (n < 1000) return `${n}`;
+  if (n < 10_000) return `${(n / 1000).toFixed(1)}k`;
+  return `${Math.round(n / 1000)}k`;
+}
+
 export function PhaseBlock({ block }: PhaseBlockProps) {
   const phase = block.phase || "unknown";
   const isDone = block.status === "done";
@@ -35,6 +42,7 @@ export function PhaseBlock({ block }: PhaseBlockProps) {
 
   const displayName = getPhaseDisplayName(phase, block.round);
   const elapsedLabel = formatMs(block.elapsedMs);
+  const tokenLabel = formatTokens(block.totalTokens);
   const timestamp = new Date().toLocaleTimeString("en-US", {
     hour12: false,
     hour: "2-digit",
@@ -73,6 +81,9 @@ export function PhaseBlock({ block }: PhaseBlockProps) {
 
         <span className="ml-auto shrink-0 flex items-center gap-1.5">
           {isStreaming && <AsciiSpinner variant="braille" className="text-[10px]" />}
+          {tokenLabel && (
+            <span className="text-[10px] text-term-cyan/70">{tokenLabel}tok</span>
+          )}
           {elapsedLabel && (
             <span className="text-[10px] text-term-green-dim/80">[{elapsedLabel}]</span>
           )}

@@ -15,7 +15,7 @@ from base.base_agent import BaseAgent
 from base.protocol import (
     AgentRequest, AgentChunk, AgentResult, AgentError,
     AgentToolStart, AgentToolResult, AgentPlan, AgentCheck,
-    AgentToolCall, PhaseStart, PhaseEnd, Timing,
+    AgentToolCall, PhaseStart, PhaseEnd, Timing, TokenUsage,
 )
 from base.tools import ToolRegistry
 from base.tools.builtin import (
@@ -91,6 +91,49 @@ class PECAgent(BaseAgent):
             return True
         return ERROR_BRACKET_RE.match(text) is None
 
+    @staticmethod
+    def _extract_usage(usage_obj: Any) -> dict[str, int]:
+        """Normalize OpenAI / DeepSeek usage objects into a flat int dict.
+
+        Supports:
+          - DeepSeek: prompt_cache_hit_tokens / prompt_cache_miss_tokens
+          - OpenAI:   prompt_tokens_details.cached_tokens
+                      completion_tokens_details.reasoning_tokens
+        Returns zeros when usage is None or fields missing.
+        """
+        out = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "cached_tokens": 0,
+            "reasoning_tokens": 0,
+        }
+        if not usage_obj:
+            return out
+
+        def _get(obj: Any, key: str, default: Any = None) -> Any:
+            if obj is None:
+                return default
+            if isinstance(obj, dict):
+                return obj.get(key, default)
+            return getattr(obj, key, default)
+
+        out["prompt_tokens"] = int(_get(usage_obj, "prompt_tokens", 0) or 0)
+        out["completion_tokens"] = int(_get(usage_obj, "completion_tokens", 0) or 0)
+        out["total_tokens"] = int(_get(usage_obj, "total_tokens", 0) or 0)
+
+        # DeepSeek-style cache fields
+        ds_hit = _get(usage_obj, "prompt_cache_hit_tokens", None)
+        if ds_hit is not None:
+            out["cached_tokens"] = int(ds_hit or 0)
+        else:
+            details = _get(usage_obj, "prompt_tokens_details", None)
+            out["cached_tokens"] = int(_get(details, "cached_tokens", 0) or 0)
+
+        completion_details = _get(usage_obj, "completion_tokens_details", None)
+        out["reasoning_tokens"] = int(_get(completion_details, "reasoning_tokens", 0) or 0)
+        return out
+
     # ── LLM call helpers ────────────────────────────────────
 
     @staticmethod
@@ -127,11 +170,12 @@ class PECAgent(BaseAgent):
 
     def _call_llm_json(
         self, system_prompt: str, messages: list[dict[str, Any]], flog: _LLMFileLogger, phase: str, round_i: int,
-    ) -> tuple[dict[str, Any], int]:
+    ) -> tuple[dict[str, Any], int, dict[str, int]]:
         """Non-streaming LLM call that returns parsed JSON.
 
         Returns:
-            (parsed_dict, elapsed_ms): parsed JSON object and call latency in ms.
+            (parsed_dict, elapsed_ms, usage): parsed JSON object, call latency in ms,
+            and normalized token usage dict.
         """
         model = self._get_model()
         llm = self._get_llm()
@@ -154,10 +198,15 @@ class PECAgent(BaseAgent):
 
         content = resp.choices[0].message.content or "{}"
         elapsed = time.perf_counter() - t0
-        _log(f"PECAgent {phase} done in {elapsed:.1f}s | len={len(content)}")
+        usage = self._extract_usage(getattr(resp, "usage", None))
+        _log(
+            f"PECAgent {phase} done in {elapsed:.1f}s | len={len(content)} "
+            f"| tokens p={usage['prompt_tokens']} c={usage['completion_tokens']} "
+            f"cache={usage['cached_tokens']}"
+        )
         flog.log_response(round_i, content, [], elapsed)
 
-        return self._normalize_llm_json_content(content), int(elapsed * 1000)
+        return self._normalize_llm_json_content(content), int(elapsed * 1000), usage
 
     def _run_tool_loop(
         self, system_prompt: str, messages: list[dict[str, Any]],
@@ -178,7 +227,14 @@ class PECAgent(BaseAgent):
             t0 = time.perf_counter()
 
             try:
-                call_kwargs: dict[str, Any] = {"model": model, "messages": llm_messages, "stream": True}
+                call_kwargs: dict[str, Any] = {
+                    "model": model,
+                    "messages": llm_messages,
+                    "stream": True,
+                    # Ask provider to send a final usage chunk after [DONE].
+                    # OpenAI / DeepSeek / Qwen all honor this option.
+                    "stream_options": {"include_usage": True},
+                }
                 if tool_schemas:
                     call_kwargs["tools"] = tool_schemas
                 stream = llm.chat.completions.create(**call_kwargs)
@@ -189,9 +245,13 @@ class PECAgent(BaseAgent):
 
             collected_content = ""
             collected_tool_calls: list[dict[str, Any]] = []
+            stream_usage: Any = None
 
             try:
                 for chunk in stream:
+                    chunk_usage = getattr(chunk, "usage", None)
+                    if chunk_usage:
+                        stream_usage = chunk_usage
                     delta = chunk.choices[0].delta if chunk.choices else None
                     if not delta:
                         continue
@@ -217,7 +277,13 @@ class PECAgent(BaseAgent):
                 return ""
 
             elapsed = time.perf_counter() - t0
-            _log(f"PECAgent {phase} loop {loop_i+1} done in {elapsed:.1f}s | text={len(collected_content)}ch | tools={len(collected_tool_calls)}")
+            usage = self._extract_usage(stream_usage)
+            _log(
+                f"PECAgent {phase} loop {loop_i+1} done in {elapsed:.1f}s "
+                f"| text={len(collected_content)}ch | tools={len(collected_tool_calls)} "
+                f"| tokens p={usage['prompt_tokens']} c={usage['completion_tokens']} "
+                f"cache={usage['cached_tokens']}"
+            )
             flog.log_response(round_i, collected_content, collected_tool_calls, elapsed)
 
             yield Timing(
@@ -230,6 +296,21 @@ class PECAgent(BaseAgent):
                     "stream": True,
                     "text_chars": len(collected_content),
                     "tool_calls": len(collected_tool_calls),
+                },
+            )
+            yield TokenUsage(
+                phase="llm_call",
+                round=round_i,
+                prompt_tokens=usage["prompt_tokens"],
+                completion_tokens=usage["completion_tokens"],
+                total_tokens=usage["total_tokens"],
+                cached_tokens=usage["cached_tokens"],
+                metadata={
+                    "phase_owner": phase,
+                    "loop": loop_i + 1,
+                    "stream": True,
+                    "model": model,
+                    "reasoning_tokens": usage["reasoning_tokens"],
                 },
             )
 
@@ -510,7 +591,7 @@ class PECAgent(BaseAgent):
                     build_plan_prompt(), chat_messages,
                     memory_context=plan_memory_context, rag_context=rag_context,
                 )
-                plan_data, plan_llm_ms = self._call_llm_json(
+                plan_data, plan_llm_ms, plan_usage = self._call_llm_json(
                     build_plan_prompt(), plan_ctx.build()[1:], flog, "plan", round_i,
                 )
                 yield Timing(
@@ -518,6 +599,20 @@ class PECAgent(BaseAgent):
                     round=round_i,
                     elapsed_ms=plan_llm_ms,
                     metadata={"phase_owner": "plan", "stream": False},
+                )
+                yield TokenUsage(
+                    phase="llm_call",
+                    round=round_i,
+                    prompt_tokens=plan_usage["prompt_tokens"],
+                    completion_tokens=plan_usage["completion_tokens"],
+                    total_tokens=plan_usage["total_tokens"],
+                    cached_tokens=plan_usage["cached_tokens"],
+                    metadata={
+                        "phase_owner": "plan",
+                        "stream": False,
+                        "model": self._get_model(),
+                        "reasoning_tokens": plan_usage["reasoning_tokens"],
+                    },
                 )
                 steps = plan_data.get("steps", [])
 
@@ -597,7 +692,7 @@ class PECAgent(BaseAgent):
                     f"用户原始请求：{user_question}",
                     f"执行结果：\n{exec_text}",
                 )
-                check_data, check_llm_ms = self._call_llm_json(
+                check_data, check_llm_ms, check_usage = self._call_llm_json(
                     build_check_prompt(), check_ctx.build()[1:], flog, "check", round_i,
                 )
                 yield Timing(
@@ -605,6 +700,20 @@ class PECAgent(BaseAgent):
                     round=round_i,
                     elapsed_ms=check_llm_ms,
                     metadata={"phase_owner": "check", "stream": False},
+                )
+                yield TokenUsage(
+                    phase="llm_call",
+                    round=round_i,
+                    prompt_tokens=check_usage["prompt_tokens"],
+                    completion_tokens=check_usage["completion_tokens"],
+                    total_tokens=check_usage["total_tokens"],
+                    cached_tokens=check_usage["cached_tokens"],
+                    metadata={
+                        "phase_owner": "check",
+                        "stream": False,
+                        "model": self._get_model(),
+                        "reasoning_tokens": check_usage["reasoning_tokens"],
+                    },
                 )
                 passed = check_data.get("passed", True)
                 gaps = check_data.get("gaps", [])

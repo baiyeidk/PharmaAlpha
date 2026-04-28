@@ -31,7 +31,8 @@ export interface AgentOutputChunk {
     | "agent_result"
     | "phase_start"
     | "phase_end"
-    | "timing";
+    | "timing"
+    | "token_usage";
   content?: string;
   name?: string;
   args?: Record<string, unknown>;
@@ -50,6 +51,10 @@ export interface AgentOutputChunk {
   phase?: string;
   round?: number;
   elapsed_ms?: number;
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  cached_tokens?: number;
 }
 
 export interface AgentMeta {

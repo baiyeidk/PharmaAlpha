@@ -6,7 +6,7 @@ import { PhaseBlock } from "./phase-block";
 import { ToolEventBadge } from "./tool-event-badge";
 import { TimingPanel } from "./timing-panel";
 import { AsciiDivider } from "@/components/terminal/ascii-divider";
-import type { MessageBlock, TimingSummary } from "@/hooks/use-chat-stream";
+import type { MessageBlock, TimingSummary, TokenUsageSummary } from "@/hooks/use-chat-stream";
 
 interface ChatMessageProps {
   role: "user" | "assistant" | "system";
@@ -14,6 +14,7 @@ interface ChatMessageProps {
   isStreaming?: boolean;
   blocks?: MessageBlock[];
   timingSummary?: TimingSummary;
+  tokenSummary?: TokenUsageSummary;
 }
 
 export function ChatMessage({
@@ -22,6 +23,7 @@ export function ChatMessage({
   isStreaming,
   blocks,
   timingSummary,
+  tokenSummary,
 }: ChatMessageProps) {
   const isUser = role === "user";
 
@@ -70,7 +72,7 @@ export function ChatMessage({
       ) : null}
 
       {timingSummary && (timingSummary.totalMs > 0 || timingSummary.llmCalls.length > 0) && (
-        <TimingPanel summary={timingSummary} />
+        <TimingPanel summary={timingSummary} tokenSummary={tokenSummary} />
       )}
 
       <AsciiDivider variant="dots" className="mt-3 opacity-30" />

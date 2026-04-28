@@ -465,7 +465,7 @@ export async function POST(req: Request) {
       const passthroughTypes = new Set([
         "tool_start", "tool_result", "plan", "check",
         "agent_chunk", "agent_delegate", "agent_result",
-        "phase_start", "phase_end", "timing",
+        "phase_start", "phase_end", "timing", "token_usage",
       ]);
       if (passthroughTypes.has(chunk.type)) {
         controller.enqueue({ ...chunk, metadata: { ...chunk.metadata, conversationId: convId } });

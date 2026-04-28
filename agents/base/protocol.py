@@ -20,6 +20,9 @@ OUTPUT (stdout, one JSON object per line):
   {"type": "phase_end",      "phase": "plan|execute|check|synthesize", "round": 1}
   {"type": "timing",         "phase": "memory_recall|rag_search|plan|execute|check|synthesize|llm_call|tool_call|total",
                               "round": 1, "elapsed_ms": 1234, "metadata": {...}}
+  {"type": "token_usage",    "phase": "plan|execute|check|synthesize|llm_call|total",
+                              "round": 1, "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0,
+                              "cached_tokens": 0, "metadata": {...}}
   {"type": "agent_delegate", "agent_name": "...", "task": "..."}
   {"type": "agent_result",   "agent_name": "...", "success": true, "summary": "..."}
   {"type": "result",         "content": "final text...", "metadata": {...}}
@@ -273,6 +276,45 @@ class Timing:
             "phase": self.phase,
             "elapsed_ms": self.elapsed_ms,
             "round": self.round,
+        }
+        if self.metadata:
+            d["metadata"] = self.metadata
+        return d
+
+
+@dataclass
+class TokenUsage:
+    """Emitted alongside an LLM call to report prompt / completion token usage.
+
+    `phase` is one of:
+      - per-call: llm_call (always carries phase_owner in metadata)
+      - top-level rollup: plan | execute | check | synthesize | total
+
+    `cached_tokens` is the prompt-cache-hit tokens (DeepSeek `prompt_cache_hit_tokens`,
+    OpenAI `prompt_tokens_details.cached_tokens`). 0 when the provider does not report it.
+
+    `metadata` may carry e.g.
+      {"phase_owner": "execute", "loop": 1, "stream": true, "model": "deepseek-chat",
+       "reasoning_tokens": 0}.
+    """
+    phase: str
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    cached_tokens: int = 0
+    round: int = 0
+    metadata: dict[str, Any] | None = None
+    type: str = "token_usage"
+
+    def to_json(self) -> dict[str, Any]:
+        d: dict[str, Any] = {
+            "type": self.type,
+            "phase": self.phase,
+            "round": self.round,
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+            "total_tokens": self.total_tokens,
+            "cached_tokens": self.cached_tokens,
         }
         if self.metadata:
             d["metadata"] = self.metadata

@@ -34,6 +34,13 @@ function fmt(ms: number): string {
   return `${(ms / 1000).toFixed(ms < 10_000 ? 2 : 1)}s`;
 }
 
+function fmtTok(n: number): string {
+  if (!n) return "—";
+  if (n < 1000) return `${n}`;
+  if (n < 10_000) return `${(n / 1000).toFixed(2)}k`;
+  return `${(n / 1000).toFixed(1)}k`;
+}
+
 export function TimingStatsBar({ stats, onClear }: TimingStatsBarProps) {
   const [open, setOpen] = useState(false);
   if (stats.count === 0) return null;
@@ -41,6 +48,8 @@ export function TimingStatsBar({ stats, onClear }: TimingStatsBarProps) {
   const orderedRows = PHASE_ORDER
     .map((p) => stats.rows.find((r) => r.phase === p))
     .filter((r): r is NonNullable<typeof r> => !!r && r.count > 0);
+
+  const hasTokens = stats.tokens.totalP50 > 0;
 
   return (
     <div className="font-mono">
@@ -53,7 +62,7 @@ export function TimingStatsBar({ stats, onClear }: TimingStatsBarProps) {
         title={`Based on the last ${stats.count} request(s) in this browser`}
       >
         <span className="text-term-green-dim uppercase tracking-wider">
-          Latency · n={stats.count}
+          Stats · n={stats.count}
         </span>
         <span className="text-foreground/80">
           P50 <span className="text-term-amber">{fmt(stats.totalP50)}</span>
@@ -61,6 +70,11 @@ export function TimingStatsBar({ stats, onClear }: TimingStatsBarProps) {
         <span className="text-foreground/80">
           P95 <span className="text-term-amber">{fmt(stats.totalP95)}</span>
         </span>
+        {hasTokens && (
+          <span className="text-foreground/80">
+            <span className="text-term-cyan">{fmtTok(stats.tokens.totalP50)}t</span>
+          </span>
+        )}
         <ChevronDown
           className={cn(
             "h-3 w-3 text-term-green-dim transition-transform",
@@ -101,7 +115,7 @@ export function TimingStatsBar({ stats, onClear }: TimingStatsBarProps) {
             </thead>
             <tbody>
               <tr className="border-b border-term-green/10">
-                <td className="text-term-amber py-0.5">Total</td>
+                <td className="text-term-amber py-0.5">Total latency</td>
                 <td className="text-right text-term-amber">{fmt(stats.totalP50)}</td>
                 <td className="text-right text-term-amber">{fmt(stats.totalP95)}</td>
                 <td className="text-right text-term-amber">{fmt(stats.totalAvg)}</td>
@@ -120,6 +134,52 @@ export function TimingStatsBar({ stats, onClear }: TimingStatsBarProps) {
               ))}
             </tbody>
           </table>
+
+          {hasTokens && (
+            <div className="mt-3 pt-3 border-t border-term-green/10">
+              <div className="text-[10px] text-term-green-dim uppercase tracking-wider mb-1.5">
+                Token usage (per request)
+              </div>
+              <table className="w-full text-[11px] tabular-nums">
+                <thead>
+                  <tr className="text-term-green-dim text-[10px] uppercase tracking-wider">
+                    <th className="text-left font-normal pb-1">Metric</th>
+                    <th className="text-right font-normal pb-1">P50</th>
+                    <th className="text-right font-normal pb-1">P95</th>
+                    <th className="text-right font-normal pb-1">Avg</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b border-term-green/10">
+                    <td className="text-term-cyan py-0.5">Total tokens</td>
+                    <td className="text-right text-term-cyan">{fmtTok(stats.tokens.totalP50)}</td>
+                    <td className="text-right text-term-cyan">{fmtTok(stats.tokens.totalP95)}</td>
+                    <td className="text-right text-term-cyan">{fmtTok(stats.tokens.totalAvg)}</td>
+                  </tr>
+                  <tr>
+                    <td className="text-foreground/70 py-0.5">Prompt</td>
+                    <td className="text-right text-foreground/80">{fmtTok(stats.tokens.promptP50)}</td>
+                    <td className="text-right text-foreground/60">—</td>
+                    <td className="text-right text-foreground/60">—</td>
+                  </tr>
+                  <tr>
+                    <td className="text-foreground/70 py-0.5">Completion</td>
+                    <td className="text-right text-foreground/80">{fmtTok(stats.tokens.completionP50)}</td>
+                    <td className="text-right text-foreground/60">—</td>
+                    <td className="text-right text-foreground/60">—</td>
+                  </tr>
+                  <tr>
+                    <td className="text-foreground/70 py-0.5">Cached</td>
+                    <td className="text-right text-foreground/80">{fmtTok(stats.tokens.cachedP50)}</td>
+                    <td className="text-right text-foreground/60">—</td>
+                    <td className="text-right text-foreground/60">
+                      hit {stats.tokens.cacheHitRateAvg.toFixed(1)}%
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>

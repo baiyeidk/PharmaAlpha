@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { TimingSummary } from "./use-chat-stream";
+import type { TimingSummary, TokenUsageSummary } from "./use-chat-stream";
 
-const STORAGE_KEY = "pharma:timing-stats:v1";
+const STORAGE_KEY = "pharma:timing-stats:v2";
 const MAX_SAMPLES = 50;
 
 export interface TimingSample {
@@ -12,6 +12,10 @@ export interface TimingSample {
   byPhase: Record<string, number>;
   llmCallCount: number;
   toolCallCount: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  cachedTokens?: number;
 }
 
 export interface PercentileRow {
@@ -22,6 +26,16 @@ export interface PercentileRow {
   count: number;
 }
 
+export interface TokenStats {
+  totalP50: number;
+  totalP95: number;
+  totalAvg: number;
+  promptP50: number;
+  completionP50: number;
+  cachedP50: number;
+  cacheHitRateAvg: number;
+}
+
 export interface TimingStats {
   count: number;
   totalP50: number;
@@ -29,6 +43,7 @@ export interface TimingStats {
   totalAvg: number;
   rows: PercentileRow[];
   recent: TimingSample[];
+  tokens: TokenStats;
 }
 
 function readSamples(): TimingSample[] {
@@ -66,9 +81,27 @@ function avg(arr: number[]): number {
   return Math.round(arr.reduce((a, b) => a + b, 0) / arr.length);
 }
 
+const EMPTY_TOKEN_STATS: TokenStats = {
+  totalP50: 0,
+  totalP95: 0,
+  totalAvg: 0,
+  promptP50: 0,
+  completionP50: 0,
+  cachedP50: 0,
+  cacheHitRateAvg: 0,
+};
+
 function summarize(samples: TimingSample[]): TimingStats {
   if (samples.length === 0) {
-    return { count: 0, totalP50: 0, totalP95: 0, totalAvg: 0, rows: [], recent: [] };
+    return {
+      count: 0,
+      totalP50: 0,
+      totalP95: 0,
+      totalAvg: 0,
+      rows: [],
+      recent: [],
+      tokens: EMPTY_TOKEN_STATS,
+    };
   }
   const totals = samples.map((s) => s.totalMs).sort((a, b) => a - b);
   const phases = new Set<string>();
@@ -88,6 +121,31 @@ function summarize(samples: TimingSample[]): TimingStats {
     };
   });
 
+  const tokenSamples = samples.filter(
+    (s): s is TimingSample & { totalTokens: number } =>
+      typeof s.totalTokens === "number" && s.totalTokens > 0,
+  );
+  const tokenTotals = tokenSamples.map((s) => s.totalTokens).sort((a, b) => a - b);
+  const promptVals = tokenSamples.map((s) => s.promptTokens || 0).sort((a, b) => a - b);
+  const completionVals = tokenSamples.map((s) => s.completionTokens || 0).sort((a, b) => a - b);
+  const cachedVals = tokenSamples.map((s) => s.cachedTokens || 0).sort((a, b) => a - b);
+  const cacheHitRates = tokenSamples
+    .map((s) => ((s.cachedTokens || 0) / Math.max(1, s.promptTokens || 0)) * 100)
+    .filter((r) => r >= 0);
+
+  const tokens: TokenStats =
+    tokenSamples.length === 0
+      ? EMPTY_TOKEN_STATS
+      : {
+          totalP50: percentile(tokenTotals, 50),
+          totalP95: percentile(tokenTotals, 95),
+          totalAvg: avg(tokenTotals),
+          promptP50: percentile(promptVals, 50),
+          completionP50: percentile(completionVals, 50),
+          cachedP50: percentile(cachedVals, 50),
+          cacheHitRateAvg: avg(cacheHitRates),
+        };
+
   return {
     count: samples.length,
     totalP50: percentile(totals, 50),
@@ -95,6 +153,7 @@ function summarize(samples: TimingSample[]): TimingStats {
     totalAvg: avg(totals),
     rows,
     recent: samples.slice(-10),
+    tokens,
   };
 }
 
@@ -107,7 +166,7 @@ export function useTimingStats() {
   }, []);
 
   const record = useCallback(
-    (key: string, summary: TimingSummary) => {
+    (key: string, summary: TimingSummary, tokenSummary?: TokenUsageSummary) => {
       if (!summary || summary.totalMs <= 0) return;
       if (seenKeysRef.current.has(key)) return;
       seenKeysRef.current.add(key);
@@ -118,6 +177,14 @@ export function useTimingStats() {
         byPhase: { ...summary.byPhase },
         llmCallCount: summary.llmCalls.length,
         toolCallCount: summary.toolCalls.length,
+        ...(tokenSummary && tokenSummary.callCount > 0
+          ? {
+              promptTokens: tokenSummary.promptTokens,
+              completionTokens: tokenSummary.completionTokens,
+              totalTokens: tokenSummary.totalTokens,
+              cachedTokens: tokenSummary.cachedTokens,
+            }
+          : {}),
       };
       const next = [...readSamples(), sample].slice(-MAX_SAMPLES);
       writeSamples(next);

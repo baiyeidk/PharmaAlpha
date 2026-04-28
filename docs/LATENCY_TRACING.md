@@ -1,25 +1,34 @@
 ---
-title: PharmaAlpha 端到端延迟打点
+title: PharmaAlpha 端到端延迟 + Token 用量打点
 tags:
   - 性能
   - 可观测性
   - 协议
+  - 成本
 ---
 
-# 端到端延迟打点（Latency Tracing）
+# 端到端延迟 + Token 用量打点（Latency & Token Tracing）
 
 ## 1. 目标
 
-回答 "一次完整 PEC 请求各阶段的耗时是多少？" 而无需手动查日志。
+回答两个面试常考问题：
+1. **"一次完整 PEC 请求各阶段的耗时是多少？"**
+2. **"一次请求消耗多少 tokens？多少成本？"**
 
-- **每次请求**实时把每个阶段的 `elapsed_ms` 推给前端
-- 前端**逐阶段渲染**（PhaseBlock 旁的 `[3.2s]`、ToolEventBadge 旁的 `[200ms]`）
-- 提供消息级 `TimingPanel`（按阶段、按 LLM 调用、按 tool 调用展开）
-- 提供跨会话 `TimingStatsBar`（最近 50 次请求的 P50 / P95，存浏览器 localStorage）
+无需翻日志，前端实时展示 + 跨会话累计 P50/P95。
 
-## 2. 协议（新增 `timing` 事件）
+### 提供的能力
 
-新增 `Timing` dataclass：`agents/base/protocol.py`。
+- **每次请求**实时把每个阶段的 `elapsed_ms` 和每次 LLM 调用的 `prompt_tokens / completion_tokens / cached_tokens` 推给前端
+- 前端**逐阶段渲染**（PhaseBlock 旁的 `4.2k tok [3.2s]`、ToolEventBadge 旁的 `[200ms]`）
+- 消息级 `TimingPanel`：双 tab（Latency / Tokens），含阶段占比条形图、LLM 调用明细（带 token 数）、按阶段聚合的 token 用量、估算成本
+- 跨会话 `TimingStatsBar`：最近 50 次请求的延迟 P50/P95 + token 总量 P50/P95 + cache hit 率，存浏览器 localStorage
+
+## 2. 协议（新增 `timing` + `token_usage` 事件）
+
+均在 `agents/base/protocol.py` 定义。
+
+### `timing`
 
 ```json
 {
@@ -30,6 +39,40 @@ tags:
   "metadata": { "...": "phase-specific" }
 }
 ```
+
+### `token_usage`
+
+```json
+{
+  "type": "token_usage",
+  "phase": "llm_call",
+  "round": 1,
+  "prompt_tokens": 5100,
+  "completion_tokens": 820,
+  "total_tokens": 5920,
+  "cached_tokens": 3800,
+  "metadata": {
+    "phase_owner": "execute",
+    "loop": 1,
+    "stream": true,
+    "model": "deepseek-chat",
+    "reasoning_tokens": 0
+  }
+}
+```
+
+#### 数据来源
+
+| Provider 字段                                | 协议字段                                |
+| -------------------------------------------- | --------------------------------------- |
+| `usage.prompt_tokens`                        | `prompt_tokens`                         |
+| `usage.completion_tokens`                    | `completion_tokens`                     |
+| `usage.total_tokens`                         | `total_tokens`                          |
+| `usage.prompt_cache_hit_tokens` (DeepSeek)   | `cached_tokens`                         |
+| `usage.prompt_tokens_details.cached_tokens` (OpenAI) | `cached_tokens`                 |
+| `usage.completion_tokens_details.reasoning_tokens` | `metadata.reasoning_tokens` |
+
+`_extract_usage()` 在 PEC Agent 里做了双家归一化，OpenAI / DeepSeek / Qwen 都能用同一份代码。
 
 **phase 分类**：
 
@@ -58,30 +101,39 @@ tags:
 - **`_recall_memory`**：整体耗时（包含 embedding 生成 + pgvector 查询）
 - **`_pre_search_rag`**：整体耗时
 - **主循环**：plan/execute/check/synthesize 各阶段在 `PhaseStart` 之后取 `t = time.perf_counter()`，`PhaseEnd` 前 emit `Timing`
-- **`_call_llm_json`**：返回值改成 `(parsed, elapsed_ms)`，调用方 emit `llm_call`
-- **`_run_tool_loop`**：内部每次 LLM 流式调用 + 每次 tool 执行都 yield `Timing`
+- **`_call_llm_json`**：返回值改成 `(parsed, elapsed_ms, usage)`，调用方 emit `llm_call` + `token_usage`
+- **`_run_tool_loop`**：
+  - 给流式调用传 `stream_options={"include_usage": True}`，循环中捕获 `chunk.usage`
+  - 每次 LLM 流式调用 + 每次 tool 执行都 yield `Timing`
+  - 流式结束后 yield `TokenUsage`
 
 > 用 `time.perf_counter()` 而非 `time.time()`：单调时钟，不受 NTP 校时影响，精度足够（10ns 级）。
+>
+> `_extract_usage()` 静态方法把 OpenAI / DeepSeek 不同的 usage 字段名归一化成统一字典。
 
 ### Next.js（透传）
 
-- **`src/lib/agents/types.ts`**：`AgentOutputChunk.type` 加 `"timing"`，并加 `elapsed_ms?: number` 字段
-- **`src/app/api/chat/route.ts`**：`passthroughTypes` 集合加上 `"timing"`，事件直接通过 SSE 推到前端
+- **`src/lib/agents/types.ts`**：`AgentOutputChunk.type` 加 `"timing" | "token_usage"`，加 `elapsed_ms / prompt_tokens / completion_tokens / total_tokens / cached_tokens` 字段
+- **`src/app/api/chat/route.ts`**：`passthroughTypes` 集合加上 `"timing"` 和 `"token_usage"`，事件直接通过 SSE 推到前端
 - **`src/lib/agents/executor.ts`**：无需改动（已经按行 JSON.parse 转发）
 
 ### 前端
 
 - **`src/hooks/use-chat-stream.ts`**：
-  - `TimingEntry` / `TimingSummary` 类型
+  - 类型：`TimingEntry / TimingSummary / TokenUsageEntry / TokenUsageSummary`
   - `applyTimingToBlocks()`：把顶层阶段耗时挂到对应 `MessageBlock.elapsedMs`
-  - `buildTimingSummary()`：聚合 `byPhase` / `llmCalls` / `toolCalls` / `totalMs`
-  - `ChatMessage.timingSummary` 实时更新
-- **`src/hooks/use-timing-stats.ts`**：跨会话累计样本（localStorage `pharma:timing-stats:v1`，最多 50 个），输出 P50 / P95 / Avg
+  - `applyTokenToBlocks()`：把 `llm_call.metadata.phase_owner` 对应的 token 累加到 PhaseBlock 的 `totalTokens`
+  - `buildTimingSummary()` / `buildTokenSummary()`：聚合
+  - **交叉链接**：在 `updateAssistant()` 里把每个 `llmCall` 和它对应的 `tokenUsage` 配对（按 phase_owner + loop + stream），让 TimingPanel 一行显示 `Plan stream 5.2s · 3.1k tok`
+  - `ChatMessage.timingSummary / tokenSummary` 实时更新
+- **`src/hooks/use-timing-stats.ts`**：跨会话累计样本（localStorage `pharma:timing-stats:v2`，最多 50 个），输出延迟 P50/P95/Avg + token P50/P95/Avg + cache hit 率
 - **`src/components/chat/`**：
-  - `phase-block.tsx`：标题旁渲染 `[N.Ns]`
+  - `phase-block.tsx`：标题旁渲染 `4.2k tok [N.Ns]`
   - `tool-event-badge.tsx`：工具徽章末尾渲染 `[N.Ns]`
-  - `timing-panel.tsx`：消息底部折叠面板，展示 phase 占比条形图、LLM/Tool 调用列表
-  - `timing-stats-bar.tsx`：聊天面板顶部，紧凑显示 `P50 ?s / P95 ?s · n=N`
+  - `timing-panel.tsx`：消息底部折叠面板，**双 tab**（Latency / Tokens）：
+    - **Latency tab**：phase 占比条形图、Per-round Execute、LLM 调用明细（含 token 数）、Tool 调用列表
+    - **Tokens tab**：四个 stat 卡（Prompt / Completion / Cached / ~Cost）、按 phase 聚合的 token 占比条形图、cache 命中率、avg per call
+  - `timing-stats-bar.tsx`：聊天面板顶部，紧凑显示 `P50 ?s / P95 ?s / Total tok · n=N`，展开后两张表（Per-phase latency + Token usage）
 
 ## 4. 验证
 
@@ -101,19 +153,41 @@ PY
 {"type": "timing", "phase": "plan", "elapsed_ms": 3260, "round": 1, "metadata": {"steps": 4}}
 ```
 
-完整端到端 smoke test 见 commit / 讨论记录，模拟一次 PEC 1 轮路径，输出：
+完整端到端 smoke test 模拟一次 PEC 1 轮路径：
 
 ```
-Total: 29726 ms
-   memory_recall:    812 ms (  2.7%)
-      rag_search:    634 ms (  2.1%)
-            plan:   3260 ms ( 11.0%)
-         execute:  15300 ms ( 51.5%)
-           check:   2020 ms (  6.8%)
-      synthesize:   7700 ms ( 25.9%)
-  llm calls: 5 (sum=27420 ms)   ← LLM 占 92%
-  tool calls: 1 (sum=312 ms)
+Total latency: 29726 ms (LLM ~92%, tools ~1%)
+
+Token usage (5 LLM calls):
+              total tokens   prompt   completion   cached
+  execute:        12,840    11,600       1,240    8,600   (×2)
+  synthesize:      9,650     8,200       1,450    5,200   (×1)
+  plan:            4,580     4,200         380    3,200   (×1)
+  check:           3,920     3,800         120    2,900   (×1)
+  ─────────────────────────────────────────────────────
+  Total:          30,990    27,800       3,190   19,900
+
+Cache hit: 71.6% (19.9k / 27.8k prompt)
+Estimated cost @ DeepSeek public pricing: $0.00411 per request
 ```
+
+> [!info] 协议事件序列
+> 一次完整请求会按时间顺序 emit：
+> ```
+> timing(memory_recall) → timing(rag_search)
+> phase_start(plan) → timing(llm_call, owner=plan) → token_usage(owner=plan)
+>   → plan event → timing(plan) → phase_end(plan)
+> phase_start(execute)
+>   → timing(llm_call, owner=execute, loop=1) → token_usage(owner=execute, loop=1)
+>   → tool_start → tool_result → timing(tool_call)
+>   → timing(llm_call, owner=execute, loop=2) → token_usage(owner=execute, loop=2)
+>   → timing(execute) → phase_end(execute)
+> phase_start(check) → timing(llm_call, owner=check) → token_usage(owner=check)
+>   → check event → timing(check) → phase_end(check)
+> phase_start(synthesize)
+>   → chunk… → timing(llm_call, owner=synthesize) → token_usage(owner=synthesize)
+>   → timing(synthesize) → timing(total) → result → phase_end(synthesize)
+> ```
 
 ## 5. 限制 & 后续
 

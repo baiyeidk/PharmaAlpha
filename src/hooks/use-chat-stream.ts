@@ -25,8 +25,46 @@ export interface TimingSummary {
   byPhase: Record<string, number>;
   perRoundExecuteMs: number[];
   toolCalls: Array<{ name: string; elapsedMs: number; phaseOwner?: string; success?: boolean }>;
-  llmCalls: Array<{ phaseOwner: string; loop?: number; stream: boolean; elapsedMs: number }>;
+  llmCalls: Array<{
+    phaseOwner: string;
+    loop?: number;
+    stream: boolean;
+    elapsedMs: number;
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
+    cachedTokens?: number;
+  }>;
   raw: TimingEntry[];
+}
+
+export interface TokenUsageEntry {
+  phase: string;
+  round?: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  cachedTokens: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface TokenUsageSummary {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  cachedTokens: number;
+  byPhaseOwner: Record<
+    string,
+    {
+      promptTokens: number;
+      completionTokens: number;
+      totalTokens: number;
+      cachedTokens: number;
+      callCount: number;
+    }
+  >;
+  callCount: number;
+  raw: TokenUsageEntry[];
 }
 
 export interface MessageBlock {
@@ -42,6 +80,9 @@ export interface MessageBlock {
   checkResult?: { passed: boolean; summary: string; gaps?: string[] };
   status: "streaming" | "done" | "error";
   elapsedMs?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
 }
 
 export interface ChatMessage {
@@ -52,6 +93,8 @@ export interface ChatMessage {
   blocks?: MessageBlock[];
   timings?: TimingEntry[];
   timingSummary?: TimingSummary;
+  tokens?: TokenUsageEntry[];
+  tokenSummary?: TokenUsageSummary;
 }
 
 interface UseChatStreamOptions {
@@ -183,6 +226,62 @@ export function useChatStream({
       let receivedVisibleContent = false;
       let streamErrorMessage: string | null = null;
       const timings: TimingEntry[] = [];
+      const tokens: TokenUsageEntry[] = [];
+
+      function buildTokenSummary(entries: TokenUsageEntry[]): TokenUsageSummary {
+        const summary: TokenUsageSummary = {
+          promptTokens: 0,
+          completionTokens: 0,
+          totalTokens: 0,
+          cachedTokens: 0,
+          byPhaseOwner: {},
+          callCount: 0,
+          raw: entries,
+        };
+        for (const t of entries) {
+          if (t.phase !== "llm_call") continue;
+          summary.promptTokens += t.promptTokens;
+          summary.completionTokens += t.completionTokens;
+          summary.totalTokens += t.totalTokens || t.promptTokens + t.completionTokens;
+          summary.cachedTokens += t.cachedTokens;
+          summary.callCount += 1;
+          const owner = (t.metadata?.phase_owner as string) || "?";
+          const slot =
+            summary.byPhaseOwner[owner] ||
+            (summary.byPhaseOwner[owner] = {
+              promptTokens: 0,
+              completionTokens: 0,
+              totalTokens: 0,
+              cachedTokens: 0,
+              callCount: 0,
+            });
+          slot.promptTokens += t.promptTokens;
+          slot.completionTokens += t.completionTokens;
+          slot.totalTokens += t.totalTokens || t.promptTokens + t.completionTokens;
+          slot.cachedTokens += t.cachedTokens;
+          slot.callCount += 1;
+        }
+        return summary;
+      }
+
+      function applyTokenToBlocks(t: TokenUsageEntry) {
+        if (t.phase !== "llm_call") return;
+        const owner = t.metadata?.phase_owner as string | undefined;
+        if (!owner) return;
+        const totalTokens = t.totalTokens || t.promptTokens + t.completionTokens;
+        for (let i = currentBlocks.length - 1; i >= 0; i--) {
+          const b = currentBlocks[i];
+          const matchPhase =
+            b.type === "phase" && b.phase === owner && (t.round ? b.round === t.round : true);
+          const matchSynthesize = owner === "synthesize" && b.type === "supervisor";
+          if (matchPhase || matchSynthesize) {
+            b.promptTokens = (b.promptTokens || 0) + t.promptTokens;
+            b.completionTokens = (b.completionTokens || 0) + t.completionTokens;
+            b.totalTokens = (b.totalTokens || 0) + totalTokens;
+            return;
+          }
+        }
+      }
 
       function buildTimingSummary(entries: TimingEntry[]): TimingSummary {
         const byPhase: Record<string, number> = {};
@@ -283,7 +382,30 @@ export function useChatStream({
           .map((b) => b.content)
           .filter(Boolean)
           .join("");
-        const summary = timings.length > 0 ? buildTimingSummary(timings) : undefined;
+        const tSummary = timings.length > 0 ? buildTimingSummary(timings) : undefined;
+        const tokSummary = tokens.length > 0 ? buildTokenSummary(tokens) : undefined;
+
+        // Cross-link: enrich each timing.llm_call with its matching token usage,
+        // so TimingPanel can show `Plan stream 5.2s · 3.1k tok` in one row.
+        if (tSummary && tokSummary && tokSummary.callCount > 0) {
+          const tokenIter = [...tokens].filter((t) => t.phase === "llm_call");
+          tSummary.llmCalls.forEach((call) => {
+            const idx = tokenIter.findIndex(
+              (t) =>
+                (t.metadata?.phase_owner as string | undefined) === call.phaseOwner &&
+                (t.metadata?.loop as number | undefined) === call.loop &&
+                !!t.metadata?.stream === call.stream,
+            );
+            if (idx >= 0) {
+              const tok = tokenIter.splice(idx, 1)[0];
+              call.promptTokens = tok.promptTokens;
+              call.completionTokens = tok.completionTokens;
+              call.totalTokens = tok.totalTokens || tok.promptTokens + tok.completionTokens;
+              call.cachedTokens = tok.cachedTokens;
+            }
+          });
+        }
+
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
@@ -292,7 +414,9 @@ export function useChatStream({
                   content: fullContent,
                   blocks: [...currentBlocks],
                   timings: timings.length > 0 ? [...timings] : undefined,
-                  timingSummary: summary,
+                  timingSummary: tSummary,
+                  tokens: tokens.length > 0 ? [...tokens] : undefined,
+                  tokenSummary: tokSummary,
                 }
               : m
           )
@@ -524,6 +648,21 @@ export function useChatStream({
                 };
                 timings.push(entry);
                 applyTimingToBlocks(entry);
+                updateAssistant();
+              } else if (chunk.type === "token_usage") {
+                receivedAnyChunk = true;
+                const entry: TokenUsageEntry = {
+                  phase: chunk.phase || "unknown",
+                  round: typeof chunk.round === "number" ? chunk.round : 0,
+                  promptTokens: typeof chunk.prompt_tokens === "number" ? chunk.prompt_tokens : 0,
+                  completionTokens:
+                    typeof chunk.completion_tokens === "number" ? chunk.completion_tokens : 0,
+                  totalTokens: typeof chunk.total_tokens === "number" ? chunk.total_tokens : 0,
+                  cachedTokens: typeof chunk.cached_tokens === "number" ? chunk.cached_tokens : 0,
+                  metadata: chunk.metadata,
+                };
+                tokens.push(entry);
+                applyTokenToBlocks(entry);
                 updateAssistant();
               } else if (chunk.type === "error") {
                 receivedAnyChunk = true;

@@ -155,7 +155,7 @@ export function ChatView({ conversationId, projectId, onProjectArtifactSaved }: 
     for (const msg of messages) {
       if (msg.role !== "assistant" || msg.isStreaming) continue;
       if (!msg.timingSummary || msg.timingSummary.totalMs <= 0) continue;
-      recordTiming(msg.id, msg.timingSummary);
+      recordTiming(msg.id, msg.timingSummary, msg.tokenSummary);
     }
   }, [messages, recordTiming]);
 
@@ -296,7 +296,7 @@ export function ChatView({ conversationId, projectId, onProjectArtifactSaved }: 
               <div>
                 {messages.map((msg) => (
                   <div key={msg.id} className="group relative">
-                    <ChatMessage role={msg.role} content={msg.content} isStreaming={msg.isStreaming} blocks={msg.blocks} timingSummary={msg.timingSummary} />
+                    <ChatMessage role={msg.role} content={msg.content} isStreaming={msg.isStreaming} blocks={msg.blocks} timingSummary={msg.timingSummary} tokenSummary={msg.tokenSummary} />
                     {projectId && msg.role === "assistant" && !msg.isStreaming && msg.content.trim() && (
                       <button
                         type="button"
