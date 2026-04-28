@@ -33,7 +33,7 @@ export function MacWindow({
         "flex flex-col overflow-clip rounded-[6px] border",
         variant === "default"
           ? "border-[var(--nf-border-invisible)] bg-[var(--nf-bg-surface-alpha)] shadow-[0_1px_4px_rgba(0,0,0,0.3),0_8px_32px_rgba(0,0,0,0.35)]"
-          : "border-[var(--nf-border-invisible)] bg-[rgba(14,14,16,0.6)] shadow-[0_1px_3px_rgba(0,0,0,0.2)]",
+          : "border-[var(--nf-border-invisible)] bg-[var(--nf-bg-surface-alpha)] shadow-[0_1px_3px_rgba(0,0,0,0.2)]",
         className,
       )}
     >

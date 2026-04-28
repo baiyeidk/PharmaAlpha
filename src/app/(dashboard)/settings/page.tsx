@@ -103,9 +103,9 @@ export default async function SettingsPage() {
               <span className="nf-nano">03</span>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
-              <PaletteSwatch name="bg-base" value="#0a0a0b" />
-              <PaletteSwatch name="bg-surface" value="#0e0e10" />
-              <PaletteSwatch name="bg-elevated" value="#141416" />
+              <PaletteSwatch name="bg-base" value="#201f1d" />
+              <PaletteSwatch name="bg-surface" value="#262522" />
+              <PaletteSwatch name="bg-elevated" value="#2d2c28" />
               <PaletteSwatch name="accent" value="#ff6d1f" glow />
               <PaletteSwatch name="accent2" value="#e0a848" />
               <PaletteSwatch name="border" value="#2a2a2a" />

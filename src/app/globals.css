@@ -50,18 +50,19 @@
 
   /* ── Nexus Dark FUI · terminal-legacy aliases ──
      Old term-* names kept for backward compat but remapped to
-     the restrained vacuum-tube orange palette. */
+     the restrained vacuum-tube orange palette. Surfaces resolve
+     through --nf-bg-* so theme overrides flow through. */
   --color-term-green: #ff6d1f;
   --color-term-green-dim: rgba(255, 109, 31, 0.55);
   --color-term-amber: #e0a848;
   --color-term-cyan: #c7a77a;
   --color-term-red: #d96a5e;
-  --color-term-bg: #0a0a0b;
-  --color-term-bg-raised: #0e0e10;
-  --color-term-bg-surface: #141416;
+  --color-term-bg: var(--nf-bg-base);
+  --color-term-bg-raised: var(--nf-bg-surface);
+  --color-term-bg-surface: var(--nf-bg-elevated);
 
   /* ANSI (restrained, warm-hued, not neon) */
-  --color-ansi-black: #0a0a0b;
+  --color-ansi-black: var(--nf-bg-base);
   --color-ansi-red: #d96a5e;
   --color-ansi-green: #8fbf7a;
   --color-ansi-yellow: #e0a848;
@@ -73,12 +74,12 @@
   /* Legacy medical tokens — remapped to warm palette */
   --color-scrub: #ff6d1f;
   --color-scrub-dim: rgba(255, 109, 31, 0.55);
-  --color-scalpel: #141416;
+  --color-scalpel: var(--nf-bg-elevated);
   --color-plasma: #c7a77a;
   --color-vitals-green: #8fbf7a;
   --color-vitals-red: #d96a5e;
   --color-vitals-amber: #e0a848;
-  --color-marrow: #141416;
+  --color-marrow: var(--nf-bg-elevated);
 }
 
 /*
@@ -89,14 +90,17 @@
  * Restraint: accent <8% of viewport. Glow appears on hover/focus only.
  */
 :root {
-  /* Nexus Dark FUI · primary tokens */
-  --nf-bg-base: #0a0a0b;
-  --nf-bg-surface: #0e0e10;
-  --nf-bg-elevated: #141416;
-  --nf-bg-top: #18181b;
-  --nf-bg-surface-alpha: rgba(14, 14, 16, 0.88);
-  --nf-bg-elevated-alpha: rgba(20, 20, 22, 0.85);
-  --nf-bg-top-alpha: rgba(24, 24, 27, 0.8);
+  /* Nexus Dark FUI · primary tokens
+   * Neutral warm-gray elevation: each layer is HSL(~40°, 5–7%) with rising
+   * lightness, so the page reads as a true dark gray with the faintest warm
+   * tint (R slightly > B). Avoids both pure black and dark-brown casts. */
+  --nf-bg-base: #201f1d;
+  --nf-bg-surface: #262522;
+  --nf-bg-elevated: #2d2c28;
+  --nf-bg-top: #36342f;
+  --nf-bg-surface-alpha: rgba(38, 37, 34, 0.88);
+  --nf-bg-elevated-alpha: rgba(45, 44, 40, 0.85);
+  --nf-bg-top-alpha: rgba(54, 52, 47, 0.8);
 
   --nf-text-primary: #e8e6e3;
   --nf-text-secondary: #a0998f;
@@ -381,7 +385,7 @@ body.crt-active::after {
 }
 
 .glass-subtle {
-  background: rgba(14, 14, 16, 0.7);
+  background: color-mix(in srgb, var(--nf-bg-surface) 70%, transparent);
   border: 1px solid var(--nf-border-invisible);
   box-shadow: var(--nf-shadow-sm);
 }
@@ -817,7 +821,7 @@ body.crt-active::after {
 }
 
 .nf-panel {
-  background: rgba(14, 14, 16, 0.6);
+  background: color-mix(in srgb, var(--nf-bg-surface) 60%, transparent);
   border: 1px solid var(--nf-border-invisible);
   border-radius: 6px;
 }
@@ -1058,7 +1062,7 @@ body.crt-active::after {
 }
 
 .nf-node {
-  background: rgba(14, 14, 16, 0.94);
+  background: color-mix(in srgb, var(--nf-bg-surface) 94%, transparent);
   border: 1px solid var(--nf-border-invisible);
   border-radius: 4px;
   transition: border-color var(--nf-transition-normal), box-shadow var(--nf-transition-normal);
