@@ -60,3 +60,7 @@ agents/**/.cache/
 agents/**/.logs/
 agents/logs/
 /计算机设计大赛/
+
+# stray empty files some local tools create at repo root
+/reading
+/transferring
