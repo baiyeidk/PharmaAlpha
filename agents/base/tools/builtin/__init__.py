@@ -29,8 +29,8 @@ def register_pdf_tools(registry: ToolRegistry) -> None:
 
 
 def register_web_tools(registry: ToolRegistry) -> None:
-    from .web_tools import search_web, fetch_webpage
-    for fn in (search_web, fetch_webpage):
+    from .web_tools import search_web, search_news, fetch_webpage
+    for fn in (search_web, search_news, fetch_webpage):
         registry.register(fn)
 
 

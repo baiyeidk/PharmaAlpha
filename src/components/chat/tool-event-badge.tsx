@@ -9,6 +9,7 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   get_stock_quote: "股票行情",
   get_stock_kline: "K线数据",
   search_web: "网页搜索",
+  search_news: "新闻搜索",
   fetch_webpage: "抓取网页",
   fetch_financial_report: "获取财报",
   read_uploaded_pdf: "读取PDF",
