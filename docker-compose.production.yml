@@ -1,0 +1,48 @@
+# Production override for docker-compose.yml
+#
+# Apply with:
+#   docker compose -f docker-compose.yml -f docker-compose.production.yml up -d --build
+#
+# This file is committed to git so the Actions deploy workflow can rely on it.
+# Do NOT put secrets here — secrets live in .env.production on the server.
+
+services:
+  db:
+    # Production: do NOT publish 5432 to the public internet.
+    # Override the base file's `ports` block to be empty.
+    ports: []
+    environment:
+      # Override the demo password from docker-compose.yml.
+      # The actual password is read from .env.production on the server,
+      # which must define POSTGRES_PASSWORD.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env.production}
+    restart: always
+    # Limit log volume so the disk doesn't fill up over time.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  app:
+    restart: always
+    environment:
+      # Production never re-runs the demo seed on container start.
+      RUN_PROJECT_FIRST_SEED: "false"
+      # Match the password chosen above for the db service.
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/pharma_alpha?schema=public
+      NODE_ENV: production
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    # Healthcheck: verify Next.js is actually serving.
+    # The path "/" returns 200 when unauthenticated landing redirects, 302 if
+    # auth redirects, or 401 on protected routes — all are "alive" signals.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null -w '%{http_code}' http://localhost:3000/ | grep -E '^(200|302|401)$' >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s

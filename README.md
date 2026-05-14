@@ -68,13 +68,19 @@ pnpm dev
 
 ### Docker Compose
 
-The app container waits for PostgreSQL, enables `pgvector`, runs `npx prisma db push`, and then optionally runs the project-first demo seed:
+The app container waits for PostgreSQL, enables `pgvector`, runs `npx prisma migrate deploy`, and then optionally runs the project-first demo seed:
 
 ```bash
 docker compose up --build
 ```
 
-By default `RUN_PROJECT_FIRST_SEED=true`, so `prisma/seeds/project_first_demo.sql` is applied at container startup. Set `RUN_PROJECT_FIRST_SEED=false` for production or an externally managed database.
+The dev `docker-compose.yml` defaults `RUN_PROJECT_FIRST_SEED=true`, so `prisma/seeds/project_first_demo.sql` is applied at container startup. The image's own default is `false` (safe for production); set it explicitly if you bypass the dev compose file.
+
+Schema changes are applied via versioned migrations under `prisma/migrations/`. If you have a database that was historically managed by `prisma db push`, the entrypoint will refuse to start and tell you how to baseline it (`prisma migrate resolve --applied <name>`). For throwaway dev databases you can opt back into the legacy behavior with `PRISMA_ALLOW_DB_PUSH=true`.
+
+### Production Deployment
+
+CI/CD via GitHub Actions auto-deploys `main` to a Linux server over SSH. See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the one-time server bootstrap, required GitHub Secrets, and rollback procedure.
 
 ## Adding a New Agent
 

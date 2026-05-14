@@ -1,0 +1,137 @@
+name: Deploy to Production
+
+# 触发条件:push 到 main 自动部署;也支持手动触发
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      skip_lint:
+        description: "Skip lint checks (emergency hotfix)"
+        type: boolean
+        default: false
+
+# 同一时刻只允许一个部署在跑;后来的会取消正在跑的
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  # ────────────────────────────────────────────────────────────
+  # Stage 1: 静态检查闸(挂掉就不部署)
+  # ────────────────────────────────────────────────────────────
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    if: ${{ !inputs.skip_lint }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install deps
+        run: npm ci --no-audit --no-fund
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+  # ────────────────────────────────────────────────────────────
+  # Stage 2: SSH 到服务器做部署
+  # ────────────────────────────────────────────────────────────
+  deploy:
+    name: SSH Deploy
+    runs-on: ubuntu-latest
+    needs: [lint]
+    # 即使 lint 被 skip,也允许 deploy 跑(needs 默认要求成功,所以这里放宽)
+    if: ${{ always() && (needs.lint.result == 'success' || needs.lint.result == 'skipped') }}
+    environment:
+      name: production
+      url: ${{ vars.HEALTH_URL }}
+
+    steps:
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "${SSH_PORT:-22}" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Deploy
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          GIT_BRANCH: ${{ github.ref_name }}
+          GIT_SHA: ${{ github.sha }}
+        run: |
+          ssh -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -se <<'REMOTE'
+          set -euo pipefail
+
+          DEPLOY_PATH="${DEPLOY_PATH:-/opt/pharma-alpha}"
+          GIT_BRANCH="${GIT_BRANCH:-main}"
+          GIT_SHA_SHORT="$(echo "${GIT_SHA:-unknown}" | cut -c1-7)"
+
+          echo "==> Switching to $DEPLOY_PATH"
+          cd "$DEPLOY_PATH"
+
+          echo "==> Pulling latest source ($GIT_BRANCH @ $GIT_SHA_SHORT)"
+          git fetch --all --prune
+          git reset --hard "origin/$GIT_BRANCH"
+
+          if [ ! -f .env.production ]; then
+            echo "ERROR: .env.production missing on server. Aborting." >&2
+            exit 2
+          fi
+
+          if [ ! -f docker-compose.production.yml ]; then
+            echo "ERROR: docker-compose.production.yml missing on server (use it as compose override). Aborting." >&2
+            exit 2
+          fi
+
+          echo "==> Building and restarting containers"
+          # -f 多个 compose 文件:base + production override
+          # --remove-orphans 清理被删除的服务
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.production.yml \
+            up -d --build --remove-orphans
+
+          echo "==> Pruning dangling images (keep last build cache)"
+          docker image prune -f
+
+          echo "==> Container status:"
+          docker compose -f docker-compose.yml -f docker-compose.production.yml ps
+          REMOTE
+
+      - name: Health check
+        if: ${{ vars.HEALTH_URL != '' }}
+        env:
+          HEALTH_URL: ${{ vars.HEALTH_URL }}
+        run: |
+          echo "Waiting for service to come up at $HEALTH_URL ..."
+          for i in $(seq 1 30); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$HEALTH_URL" || echo "000")
+            if [ "$STATUS" = "200" ] || [ "$STATUS" = "302" ] || [ "$STATUS" = "401" ]; then
+              echo "Service healthy (HTTP $STATUS)"
+              exit 0
+            fi
+            echo "  attempt $i/30 → HTTP $STATUS, retrying in 5s..."
+            sleep 5
+          done
+          echo "Service did not respond after 150s" >&2
+          exit 1

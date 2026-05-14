@@ -33,7 +33,10 @@ RUN npm run build
 ENV PATH="/app/.venv/bin:$PATH"
 ENV NODE_ENV=production
 ENV PORT=3000
-ENV RUN_PROJECT_FIRST_SEED=true
+# Default OFF for safety. The dev-oriented docker-compose.yml flips this to
+# `true` via ${RUN_PROJECT_FIRST_SEED:-true}, so local `docker compose up`
+# still seeds demo data; production deployments inherit the safe default.
+ENV RUN_PROJECT_FIRST_SEED=false
 
 EXPOSE 3000
 
