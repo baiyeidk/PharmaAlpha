@@ -1,7 +1,16 @@
 # Production override for docker-compose.yml
 #
 # Apply with:
-#   docker compose -f docker-compose.yml -f docker-compose.production.yml up -d --build
+#   docker compose --env-file .env.production \
+#     -f docker-compose.yml -f docker-compose.production.yml up -d --build
+#
+# IMPORTANT: --env-file is REQUIRED here.
+#   docker compose's ${VAR} interpolation (e.g. ${POSTGRES_PASSWORD}) reads
+#   only from the shell env or from the file passed as --env-file (default
+#   ".env"). The `env_file:` block inside a service definition ONLY injects
+#   variables into the container at runtime — it does NOT participate in
+#   compose-file interpolation. So we must pass --env-file .env.production
+#   for the ${POSTGRES_PASSWORD:?...} guard below to resolve.
 #
 # This file is committed to git so the Actions deploy workflow can rely on it.
 # Do NOT put secrets here — secrets live in .env.production on the server.

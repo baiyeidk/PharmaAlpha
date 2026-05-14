@@ -1,0 +1,39 @@
+# Image-based deployment override (for production via Aliyun ACR).
+#
+# Apply with:
+#   docker compose --env-file .env.production \
+#     -f docker-compose.yml \
+#     -f docker-compose.production.yml \
+#     -f docker-compose.image.yml \
+#     pull
+#   docker compose --env-file .env.production \
+#     -f docker-compose.yml \
+#     -f docker-compose.production.yml \
+#     -f docker-compose.image.yml \
+#     up -d --remove-orphans
+#
+# This file removes the `build:` from the app service and replaces it with
+# `image:` pointing at an Aliyun ACR repository. The image is pre-built and
+# pushed by GitHub Actions, so the production server never compiles anything
+# (no Next.js build, no npm/pip install, near-zero RAM/CPU at deploy time).
+#
+# Required env vars (resolved by docker compose's --env-file or shell env):
+#   ACR_REGISTRY_VPC : e.g. crpi-xxx-vpc.cn-beijing.personal.cr.aliyuncs.com
+#                      Use the *-vpc.* domain so the pull goes through the
+#                      Aliyun internal network — no traffic charges, no rate
+#                      limit. The public domain works too but is rate-limited
+#                      to 1 Mbps on the personal tier.
+#   ACR_NAMESPACE    : e.g. pharma-alpha
+#   IMAGE_TAG        : Git SHA pushed by Actions; defaults to "latest" so a
+#                      manual `docker compose pull` still works.
+
+services:
+  app:
+    # Setting `image:` alongside the inherited `build:` from docker-compose.yml
+    # makes docker compose prefer the registry image: `compose pull` ignores
+    # `build:` entirely, and `compose up` will run the pulled image without
+    # building, as long as the image exists locally or in the registry.
+    # We intentionally avoid the `!reset` extension tag for max compatibility
+    # with older docker compose builds.
+    image: ${ACR_REGISTRY_VPC:?ACR_REGISTRY_VPC must be set}/${ACR_NAMESPACE:?ACR_NAMESPACE must be set}/app:${IMAGE_TAG:-latest}
+    pull_policy: always

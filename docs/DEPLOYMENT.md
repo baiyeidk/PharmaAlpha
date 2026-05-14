@@ -1,16 +1,22 @@
-# 生产部署 (CI/CD via GitHub Actions)
+# 生产部署 (CI/CD via GitHub Actions + Aliyun ACR)
 
 本项目通过 GitHub Actions 实现 push 到 `main` 自动部署到生产服务器:
 
 - 触发: push `main` 或手动 `workflow_dispatch`
-- 流程: **Lint/TypeCheck 闸 → SSH 到服务器 → git pull → docker compose build & up → 健康检查**
-- 服务器: 单台 Linux VPS,Docker 化部署
-- 数据库: 由 `docker-compose.yml` 内置 pgvector 服务托管
+- 流程: **Lint/TypeCheck → 在 Actions runner 上 build 镜像 → push 到阿里云 ACR → SSH 到服务器 docker compose pull + up → 健康检查**
+- 服务器: 单台 Linux VPS(阿里云 ECS 北京区),Docker 化运行
+- 镜像仓库: 阿里云 ACR 个人版(免费),走 VPC 内网拉取(免流量、不限速)
+- 数据库: `docker-compose.yml` 内置 pgvector 服务托管
+
+> 为什么镜像 build 在 Actions、不在服务器:小规格 ECS(2 核 2G)跑 Next.js 16 production build 会 OOM。
+> Actions 的 runner 7 GB RAM、多核、build 缓存可复用,15 分钟搞定;服务器只 `docker pull` + `up -d`,纯 IO,几乎不占资源。
 
 > 关键文件:
-> - [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) — Actions 编排
-> - [`docker-compose.production.yml`](../docker-compose.production.yml) — 生产环境 compose 覆盖
-> - [`scripts/server-bootstrap.sh`](../scripts/server-bootstrap.sh) — 服务器首次初始化
+> - [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) — Actions 编排(lint → build & push → ssh deploy)
+> - [`docker-compose.production.yml`](../docker-compose.production.yml) — 生产 compose 覆盖(关 demo seed、不暴露 db、healthcheck)
+> - [`docker-compose.image.yml`](../docker-compose.image.yml) — 镜像模式覆盖(把 app 从 build 改成 image)
+> - [`scripts/server-bootstrap.sh`](../scripts/server-bootstrap.sh) — 服务器首次初始化(装 Docker、建 deploy 用户、clone 仓库)
+> - [`scripts/server-acr-login.sh`](../scripts/server-acr-login.sh) — 服务器一次性 docker login 到 ACR(VPC 内网)
 
 ---
 
@@ -76,17 +82,39 @@ POSTGRES_PASSWORD=        # 数据库密码,自己定一个强密码
 
 > ⚠ 这个文件 **永远不要进 git**,`.gitignore` 已经排除 `.env*`。
 
-### 1.5 在 GitHub 配置 Secrets
+### 1.5 准备阿里云 ACR(镜像仓库)
+
+打开 `https://cr.console.aliyun.com/`,选**北京地域**(华北 2),然后:
+
+1. **创建命名空间**:`pharma-alpha`,默认仓库类型 **私有**
+2. **创建镜像仓库**:命名空间选刚创建的,仓库名 `app`,代码源选 **本地仓库**
+3. **设置 Docker 登录密码**:左侧 → 实例列表 → 个人实例 → 访问凭证 → 设置 Docker 登录密码
+
+记下这 4 个值,下一步要用:
+
+| 项 | 在 ACR 控制台哪里看 | 示例 |
+|---|---|---|
+| **公网 registry 域名**(GitHub Actions 用) | 仓库详情 → 基本信息 → 公网地址 | `crpi-xxxxxxxxx.cn-beijing.personal.cr.aliyuncs.com` |
+| **VPC registry 域名**(服务器拉镜像走内网) | 同上,内网地址 | `crpi-xxxxxxxxx-vpc.cn-beijing.personal.cr.aliyuncs.com` |
+| **命名空间** | 你刚建的 | `pharma-alpha` |
+| **登录用户名** | 仓库详情页 / RAM 子账号 | `<阿里云账号或子账号>` |
+
+### 1.6 在 GitHub 配置 Secrets
 
 仓库 → **Settings → Secrets and variables → Actions → Secrets**:
 
 | Secret | 值 |
 |---|---|
-| `SSH_HOST` | 服务器公网 IP 或域名 |
+| `SSH_HOST` | 服务器公网 IP |
 | `SSH_USER` | `deploy` |
-| `SSH_PORT` | `22`(或你自定义的端口) |
+| `SSH_PORT` | `22` |
 | `SSH_PRIVATE_KEY` | `~/.ssh/pharma_alpha_deploy` 文件**完整内容**(含 `-----BEGIN/END` 行) |
 | `DEPLOY_PATH` | `/opt/pharma-alpha` |
+| `ACR_REGISTRY` | 公网 registry 域名(上一步的) |
+| `ACR_REGISTRY_VPC` | VPC 内网 registry 域名 |
+| `ACR_NAMESPACE` | `pharma-alpha` |
+| `ACR_USERNAME` | 阿里云账号或子账号名 |
+| `ACR_PASSWORD` | ACR 控制台设置的 Docker 登录密码 |
 
 仓库 → **Settings → Secrets and variables → Actions → Variables**(可选):
 
@@ -94,7 +122,22 @@ POSTGRES_PASSWORD=        # 数据库密码,自己定一个强密码
 |---|---|---|
 | `HEALTH_URL` | `http://<域名或IP>:3000/` | 部署后健康检查;不填则跳过 |
 
-### 1.6 配置 GitHub Environment(强烈推荐)
+### 1.7 在服务器上 docker login 到 ACR(一次性)
+
+GitHub Actions 推镜像后,服务器需要拉私有镜像 — 必须先登录:
+
+```bash
+ssh deploy@<SERVER_IP>
+cd /opt/pharma-alpha
+ACR_PASSWORD='<你的 ACR 登录密码>' \
+  ./scripts/server-acr-login.sh \
+  --registry crpi-xxxxxxxxx-vpc.cn-beijing.personal.cr.aliyuncs.com \
+  --username <你的 ACR 用户名>
+```
+
+凭证存到 `~/.docker/config.json`,以后 `docker pull` 自动用。
+
+### 1.8 配置 GitHub Environment(强烈推荐)
 
 仓库 → **Settings → Environments → New environment → `production`**
 
@@ -103,16 +146,21 @@ POSTGRES_PASSWORD=        # 数据库密码,自己定一个强密码
 - **Wait timer**: 部署延迟 N 分钟(给紧急回滚留窗口)
 - **Deployment branches**: 限定只允许 `main` 触发
 
-### 1.7 第一次手动启动(可选,用于验证环境)
+### 1.9 触发首次部署
+
+什么都不用手动做了 —— push 一个 commit,Actions 会自动 build & push & deploy:
 
 ```bash
-ssh deploy@<SERVER_IP>
-cd /opt/pharma-alpha
-docker compose -f docker-compose.yml -f docker-compose.production.yml up -d --build
-docker compose ps
+git commit --allow-empty -m "ci: trigger first ACR-based deploy"
+git push origin main
 ```
 
-确认两个容器都健康后,后续 push `main` 就会自动部署。
+到 `https://github.com/<你>/PharmaAlpha/actions` 看进度,3 个 job 顺序跑:
+1. **Lint & Type Check**(~2 分钟)
+2. **Build & Push Image**(首次 ~10-15 分钟,有 cache 后 ~3 分钟)
+3. **SSH Deploy**(~30 秒)
+
+全绿之后,浏览器访问 `http://<服务器IP>:3000` 看登录页。
 
 ---
 
@@ -126,9 +174,10 @@ git push origin main
 ```
 
 阶段:
-1. **Lint & Type Check**(失败则不部署)
-2. **SSH Deploy**: 服务器上 `git pull` + `docker compose up -d --build`
-3. **Health check**: 如果配了 `HEALTH_URL`,会探测 30 次(150 秒窗口)
+1. **Lint & Type Check**(失败则不 build,不部署)
+2. **Build & Push Image**: 在 Actions runner 上 `docker buildx build` → push 到 ACR(SHA tag + latest tag)
+3. **SSH Deploy**: 服务器上 `git pull`(只为拿最新 compose 文件)+ `docker compose pull` + `up -d`,**不再在服务器 build**
+4. **Health check**: 如果配了 `HEALTH_URL`,会探测 30 次(150 秒窗口)
 
 ### 2.2 手动触发(无需 push)
 
@@ -144,29 +193,60 @@ commit message 加 `[skip ci]` 或 `[ci skip]`:
 git commit -m "docs: typo fix [skip ci]"
 ```
 
-### 2.4 回滚
+### 2.4 回滚到任意旧版本(不需要 build)
 
-服务器上手动操作:
+每次 Actions 跑完都会在 ACR 里留下一个 `<git-sha-12位>` tag。回滚就是切 tag:
 
 ```bash
 ssh deploy@<SERVER_IP>
 cd /opt/pharma-alpha
-git log --oneline -10                     # 找到要回滚的 commit
-git reset --hard <commit-sha>
-docker compose -f docker-compose.yml -f docker-compose.production.yml up -d --build
+
+# 1. 看 ACR 里有哪些可用版本
+#    (打开浏览器,在 ACR 控制台 → 镜像仓库 → app → 镜像版本 看)
+#
+# 2. 用想要的旧 tag 启动
+export IMAGE_TAG=<旧的-12位-sha>
+export ACR_REGISTRY_VPC=crpi-xxxxxxxxx-vpc.cn-beijing.personal.cr.aliyuncs.com
+export ACR_NAMESPACE=pharma-alpha
+
+docker compose --env-file .env.production \
+  -f docker-compose.yml \
+  -f docker-compose.production.yml \
+  -f docker-compose.image.yml \
+  pull
+
+docker compose --env-file .env.production \
+  -f docker-compose.yml \
+  -f docker-compose.production.yml \
+  -f docker-compose.image.yml \
+  up -d
 ```
 
-> 进阶选项: 切到镜像推方案(GHCR/ACR)后,可以直接 `docker compose pull` 拉旧 tag,无需源码回滚。
+整个回滚 < 30 秒。如果你想用 latest 标签恢复,把 IMAGE_TAG 设成 `latest` 即可。
 
 ---
 
 ## 3. 运维清单
 
+> 提示:下面所有 `docker compose ...` 命令前缀都很长。在 deploy 用户的 `~/.bashrc`
+> 加一个 alias 一劳永逸:
+> ```bash
+> alias dcp='docker compose --env-file /opt/pharma-alpha/.env.production -f /opt/pharma-alpha/docker-compose.yml -f /opt/pharma-alpha/docker-compose.production.yml -f /opt/pharma-alpha/docker-compose.image.yml'
+> ```
+> 之后 `dcp ps` / `dcp logs -f app` / `dcp pull && dcp up -d` 就行。
+>
+> 同时把 ACR 变量也写进 `~/.bashrc`,免得每次都 export:
+> ```bash
+> export ACR_REGISTRY_VPC=crpi-xxxxxxxxx-vpc.cn-beijing.personal.cr.aliyuncs.com
+> export ACR_NAMESPACE=pharma-alpha
+> export IMAGE_TAG=latest
+> ```
+
 ### 3.1 看日志
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.production.yml logs -f app
-docker compose -f docker-compose.yml -f docker-compose.production.yml logs -f db
+dcp logs -f app
+dcp logs -f db
 ```
 
 或者直接看应用 agent 日志(已通过 volume 挂在宿主机):
@@ -191,20 +271,20 @@ docker exec pharma-pg pg_dump -U postgres pharma_alpha | gzip > "$BACKUP_DIR/pha
 find "$BACKUP_DIR" -name "*.sql.gz" -mtime +14 -delete
 ```
 
-### 3.3 升级 Docker 镜像
+### 3.3 拉最新镜像并重启(等价于触发一次部署但不走 Actions)
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.production.yml pull
-docker compose -f docker-compose.yml -f docker-compose.production.yml up -d --build
+dcp pull
+dcp up -d
 docker image prune -f
 ```
 
 ### 3.4 改了环境变量后
 
-只重启 app 容器即可,不需要重 build:
+只重启 app 容器即可:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.production.yml up -d --no-build app
+dcp up -d --no-build app
 ```
 
 ---
@@ -224,11 +304,13 @@ docker compose -f docker-compose.yml -f docker-compose.production.yml up -d --no
 ```bash
 ssh deploy@<SERVER>
 cd /opt/pharma-alpha
-docker compose -f docker-compose.yml -f docker-compose.production.yml run --rm --entrypoint sh app -c '
-  for m in prisma/migrations/2026*; do
-    npx prisma migrate resolve --applied "$(basename "$m")"
-  done
-'
+docker compose --env-file .env.production \
+  -f docker-compose.yml -f docker-compose.production.yml \
+  run --rm --entrypoint sh app -c '
+    for m in prisma/migrations/2026*; do
+      npx prisma migrate resolve --applied "$(basename "$m")"
+    done
+  '
 ```
 
 之后 entrypoint 会自动转入第二种状态,后续 `git push main` → `migrate deploy` 一路通。
