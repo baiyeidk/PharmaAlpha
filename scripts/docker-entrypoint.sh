@@ -50,7 +50,7 @@ HAS_USER_TABLES=$(
 if [ "${PRISMA_ALLOW_DB_PUSH:-false}" = "true" ]; then
   echo "PRISMA_ALLOW_DB_PUSH=true → using db push (schema drift will be resolved)"
   echo "  WARNING: this is DEV/DEMO-only. It can drop columns/tables on schema drift."
-  npx prisma db push --accept-data-loss --skip-generate
+  npx prisma db push --accept-data-loss
 elif [ "$HAS_MIGRATIONS_TABLE" = "t" ] || [ "$HAS_USER_TABLES" = "f" ]; then
   echo "running prisma migrate deploy..."
   npx prisma migrate deploy
