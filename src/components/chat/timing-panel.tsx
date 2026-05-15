@@ -77,6 +77,7 @@ export function TimingPanel({ summary, tokenSummary }: TimingPanelProps) {
 
   const totalTokens = tokenSummary?.totalTokens || 0;
   const cost = tokenSummary ? estimateCostUSD(tokenSummary) : 0;
+  const replayedTools = summary.toolCalls.filter((t) => t.replayed).length;
 
   return (
     <div className="my-3 font-mono border border-term-green/15 rounded-sm bg-term-bg/50">
@@ -104,6 +105,7 @@ export function TimingPanel({ summary, tokenSummary }: TimingPanelProps) {
         {!collapsed && (
           <span className="text-[10px] text-term-green-dim ml-auto">
             {summary.llmCalls.length} llm · {summary.toolCalls.length} tool
+            {replayedTools > 0 ? ` · replay ${replayedTools}` : ""}
             {cost > 0 ? ` · ~$${cost.toFixed(5)}` : ""}
           </span>
         )}
@@ -250,6 +252,9 @@ export function TimingPanel({ summary, tokenSummary }: TimingPanelProps) {
                       >
                         <span className="text-term-cyan">{c.name}</span>{" "}
                         <span className="text-term-amber">{fmtMs(c.elapsedMs)}</span>
+                        {c.replayed ? (
+                          <span className="text-term-green-dim"> · replay</span>
+                        ) : null}
                       </span>
                     ))}
                   </div>

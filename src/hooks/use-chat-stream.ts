@@ -24,7 +24,7 @@ export interface TimingSummary {
   totalMs: number;
   byPhase: Record<string, number>;
   perRoundExecuteMs: number[];
-  toolCalls: Array<{ name: string; elapsedMs: number; phaseOwner?: string; success?: boolean }>;
+  toolCalls: Array<{ name: string; elapsedMs: number; phaseOwner?: string; success?: boolean; replayed?: boolean }>;
   llmCalls: Array<{
     phaseOwner: string;
     loop?: number;
@@ -214,13 +214,15 @@ export function useChatStream({
   }, [conversationId]);
 
   const sendMessage = useCallback(
-    async (content: string) => {
+    async (content: string, options?: { resume?: boolean }) => {
+      const isResume = options?.resume === true;
       const text = content.trim();
       const debugId = createId("debug");
-      if (!text || isLoading) {
+      if ((!text && !isResume) || isLoading) {
         console.info("[chat-stream] blocked send", {
           debugId,
           hasText: !!text,
+          isResume,
           isLoading,
         });
         return;
@@ -242,10 +244,14 @@ export function useChatStream({
         return;
       }
 
+      const userText = isResume
+        ? "继续上次中断任务（断点续跑）"
+        : text;
+
       const userMessage: ChatMessage = {
         id: createId("msg"),
         role: "user",
-        content: text,
+        content: userText,
       };
 
       const assistantId = createId("msg");
@@ -348,6 +354,7 @@ export function useChatStream({
               elapsedMs: t.elapsedMs,
               phaseOwner: t.metadata?.phase_owner as string | undefined,
               success: t.metadata?.success as boolean | undefined,
+              replayed: t.metadata?.replayed as boolean | undefined,
             });
             continue;
           }
@@ -475,6 +482,7 @@ export function useChatStream({
           agentId,
           conversationId: conversationId || "new",
           length: text.length,
+          resume: isResume,
         });
         const res = await fetch("/api/chat", {
           method: "POST",
@@ -485,7 +493,8 @@ export function useChatStream({
           body: JSON.stringify({
             agentId,
             conversationId,
-            newMessage: text,
+            newMessage: isResume ? undefined : text,
+            resume: isResume,
             debugId,
           }),
           signal: abortRef.current.signal,
@@ -860,6 +869,10 @@ export function useChatStream({
     [agentId, conversationId, isLoading, onConversationCreated, onToolCall, onStreamEnd]
   );
 
+  const resumeFromCheckpoint = useCallback(async () => {
+    await sendMessage("", { resume: true });
+  }, [sendMessage]);
+
   const stopGeneration = useCallback(() => {
     abortRef.current?.abort();
   }, []);
@@ -868,5 +881,13 @@ export function useChatStream({
     setMessages([]);
   }, []);
 
-  return { messages, isLoading, sendMessage, stopGeneration, clearMessages, setMessages };
+  return {
+    messages,
+    isLoading,
+    sendMessage,
+    resumeFromCheckpoint,
+    stopGeneration,
+    clearMessages,
+    setMessages,
+  };
 }

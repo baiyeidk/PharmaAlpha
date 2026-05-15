@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bot, Clock, HeartPulse, ImageIcon, FileText, Type, Plus, Save } from "lucide-react";
+import { Bot, Clock, HeartPulse, ImageIcon, FileText, Type, Plus, Save, RotateCcw } from "lucide-react";
 import { ChatMessage } from "./chat-message";
 import { ChatInput } from "./chat-input";
 import { WelcomeDashboard } from "./welcome-dashboard";
@@ -139,7 +139,7 @@ export function ChatView({ conversationId, projectId, onProjectArtifactSaved }: 
 
   const { stats: timingStats, record: recordTiming, clear: clearTimingStats } = useTimingStats();
 
-  const { messages, isLoading, sendMessage, stopGeneration } = useChatStream({
+  const { messages, isLoading, sendMessage, resumeFromCheckpoint, stopGeneration } = useChatStream({
     agentId: effectiveAgentId,
     conversationId: activeConvId,
     onConversationCreated: (id) => {
@@ -220,6 +220,20 @@ export function ChatView({ conversationId, projectId, onProjectArtifactSaved }: 
           </SelectContent>
         </Select>
       )}
+      <button
+        onClick={() => void resumeFromCheckpoint()}
+        disabled={isLoading || !activeConvId}
+        className={cn(
+          "flex items-center gap-1 px-2 py-0.5 rounded-md transition-colors text-[11px] font-mono",
+          isLoading || !activeConvId
+            ? "text-muted-foreground/50 cursor-not-allowed"
+            : "text-muted-foreground hover:text-foreground hover:bg-term-bg-surface"
+        )}
+        title={activeConvId ? "从最近一次中断点续跑" : "请先开始一个会话"}
+      >
+        <RotateCcw className="h-3 w-3" />
+        断点续跑
+      </button>
       <button
         onClick={() => setShowCases(!showCases)}
         className={cn(

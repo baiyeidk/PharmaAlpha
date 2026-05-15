@@ -92,6 +92,13 @@ class PECAgent(BaseAgent):
         return ERROR_BRACKET_RE.match(text) is None
 
     @staticmethod
+    def _tool_cache_key(name: str, args: dict[str, Any]) -> str:
+        try:
+            return f"{name}|{json.dumps(args or {}, ensure_ascii=False, sort_keys=True)}"
+        except Exception:
+            return f"{name}|{str(args)}"
+
+    @staticmethod
     def _extract_usage(usage_obj: Any) -> dict[str, int]:
         """Normalize OpenAI / DeepSeek usage objects into a flat int dict.
 
@@ -211,6 +218,7 @@ class PECAgent(BaseAgent):
     def _run_tool_loop(
         self, system_prompt: str, messages: list[dict[str, Any]],
         registry: ToolRegistry, flog: _LLMFileLogger, phase: str, round_i: int,
+        replay_cache: dict[str, str] | None = None,
     ) -> Generator[BaseAgent.AgentOutput, None, str]:
         """Streaming LLM tool loop. Yields events, returns collected text."""
         model = self._get_model()
@@ -363,8 +371,17 @@ class PECAgent(BaseAgent):
                 _log(f"PECAgent {phase} tool: {fn_name}({list(fn_args.keys())})")
                 t1 = time.perf_counter()
                 yield AgentToolStart(name=fn_name, args=fn_args)
-                result_str = registry.execute(fn_name, fn_args)
-                success = self._is_tool_result_success(result_str)
+                replayed = False
+                cache_key = self._tool_cache_key(fn_name, fn_args)
+                if replay_cache and cache_key in replay_cache:
+                    replayed = True
+                    result_str = replay_cache[cache_key]
+                    success = self._is_tool_result_success(result_str)
+                    _log(f"PECAgent {phase} tool replay hit: {fn_name}")
+                    yield AgentChunk(content=f"\n[断点续跑] 已复用工具结果: {fn_name}\n")
+                else:
+                    result_str = registry.execute(fn_name, fn_args)
+                    success = self._is_tool_result_success(result_str)
                 tool_elapsed = time.perf_counter() - t1
                 _log(f"PECAgent {phase} tool done: {fn_name} in {tool_elapsed:.1f}s | ok={success}")
                 flog.log_tool_exec(round_i, fn_name, fn_args, result_str, success, tool_elapsed)
@@ -377,6 +394,7 @@ class PECAgent(BaseAgent):
                         "phase_owner": phase,
                         "tool_name": fn_name,
                         "success": success,
+                        "replayed": replayed,
                     },
                 )
                 status_text = "OK" if success else "ERROR"
@@ -477,6 +495,70 @@ class PECAgent(BaseAgent):
             return None
         return "## 短期记忆（本次会话内）\n" + "\n\n".join(parts)
 
+    def _build_resume_memory(self, resume_checkpoint: dict[str, Any] | None) -> str | None:
+        """Build resumable memory context from persisted checkpoint."""
+        if not isinstance(resume_checkpoint, dict):
+            return None
+        parts: list[str] = []
+
+        status = str(resume_checkpoint.get("status") or "").strip()
+        current_phase = str(resume_checkpoint.get("currentPhase") or "").strip()
+        current_round = resume_checkpoint.get("currentRound")
+        if status or current_phase:
+            base = f"上次运行状态: {status or 'unknown'}"
+            if current_phase:
+                base += f"，中断阶段: {current_phase}"
+            if isinstance(current_round, int) and current_round > 0:
+                base += f"，轮次: {current_round}"
+            parts.append(base)
+
+        plan = resume_checkpoint.get("plan")
+        if isinstance(plan, dict):
+            steps = plan.get("steps")
+            if isinstance(steps, list) and steps:
+                step_lines = []
+                for s in steps[:10]:
+                    if isinstance(s, dict):
+                        sid = str(s.get("id") or "").strip()
+                        desc = str(s.get("description") or "").strip()
+                        if sid or desc:
+                            step_lines.append(f"- {sid + '. ' if sid else ''}{desc}")
+                if step_lines:
+                    parts.append("上次计划步骤:\n" + "\n".join(step_lines))
+
+        tools = resume_checkpoint.get("successfulTools")
+        if isinstance(tools, list) and tools:
+            tool_lines = []
+            for t in tools[-12:]:
+                if not isinstance(t, dict):
+                    continue
+                name = str(t.get("name") or "").strip()
+                preview = self._compact_text(str(t.get("resultPreview") or ""), 260)
+                if not name:
+                    continue
+                if preview:
+                    tool_lines.append(f"- {name}: {preview}")
+                else:
+                    tool_lines.append(f"- {name}")
+            if tool_lines:
+                parts.append("上次已成功执行的工具结果:\n" + "\n".join(tool_lines))
+
+        check = resume_checkpoint.get("check")
+        if isinstance(check, dict):
+            summary = str(check.get("summary") or "").strip()
+            gaps = check.get("gaps")
+            lines = []
+            if summary:
+                lines.append(f"上次审查结论: {summary}")
+            if isinstance(gaps, list) and gaps:
+                lines.append("待补缺口:\n" + "\n".join(f"- {str(g)}" for g in gaps[:8]))
+            if lines:
+                parts.append("\n".join(lines))
+
+        if not parts:
+            return None
+        return "## 断点续跑记忆（来自上次中断）\n" + "\n\n".join(parts)
+
     def _recall_memory(self, user_question: str) -> tuple[str | None, int]:
         """Auto-recall relevant memories for the current query.
 
@@ -568,6 +650,14 @@ class PECAgent(BaseAgent):
         user_question = request.messages[-1].get("content", "") if request.messages else ""
         chat_messages = [{"role": m.get("role", "user"), "content": m.get("content", "")} for m in request.messages]
         recall_query = self._build_recall_query(chat_messages) or user_question
+        resume_checkpoint = (
+            request.params.get("resume_checkpoint")
+            if isinstance(request.params, dict)
+            else None
+        )
+        resume_memory = self._build_resume_memory(resume_checkpoint if isinstance(resume_checkpoint, dict) else None)
+        replay_cache: dict[str, str] = {}
+        reused_tool_calls = 0
 
         canvas_nodes = request.params.get("canvas_nodes", [])
         if canvas_nodes:
@@ -586,6 +676,30 @@ class PECAgent(BaseAgent):
         all_execute_results: list[str] = []
         check_feedback: list[str] = []
         all_check_summaries: list[str] = []
+        if isinstance(resume_checkpoint, dict):
+            tools = resume_checkpoint.get("successfulTools")
+            if isinstance(tools, list) and tools:
+                restored = []
+                for t in tools[-12:]:
+                    if not isinstance(t, dict):
+                        continue
+                    name = str(t.get("name") or "").strip()
+                    preview = str(t.get("resultPreview") or "").strip()
+                    args = t.get("args")
+                    if name:
+                        restored.append(f"[RESUME TOOL] {name}\n{preview}\n")
+                        if isinstance(args, dict):
+                            replay_cache[self._tool_cache_key(name, args)] = preview
+                if restored:
+                    all_execute_results.append("".join(restored))
+            check_obj = resume_checkpoint.get("check")
+            if isinstance(check_obj, dict):
+                gaps = check_obj.get("gaps")
+                if isinstance(gaps, list):
+                    check_feedback = [str(g) for g in gaps[:8]]
+                summary = str(check_obj.get("summary") or "").strip()
+                if summary:
+                    all_check_summaries.append(f"上次审查结论: {summary}")
 
         memory_context, memory_elapsed_ms = self._recall_memory(recall_query)
         if memory_elapsed_ms > 0:
@@ -618,39 +732,56 @@ class PECAgent(BaseAgent):
                     check_feedback,
                 )
                 plan_memory_context = memory_context
+                if resume_memory:
+                    plan_memory_context = (
+                        f"{plan_memory_context}\n\n{resume_memory}" if plan_memory_context else resume_memory
+                    )
                 if short_term_memory:
                     plan_memory_context = (
-                        f"{memory_context}\n\n{short_term_memory}" if memory_context else short_term_memory
+                        f"{plan_memory_context}\n\n{short_term_memory}" if plan_memory_context else short_term_memory
                     )
 
-                plan_ctx = self._build_ctx(
-                    build_plan_prompt(), chat_messages,
-                    memory_context=plan_memory_context, rag_context=rag_context,
+                reuse_saved_plan = (
+                    round_i == 1
+                    and isinstance(resume_checkpoint, dict)
+                    and str(resume_checkpoint.get("status") or "") == "interrupted"
+                    and isinstance(resume_checkpoint.get("plan"), dict)
+                    and isinstance(resume_checkpoint["plan"].get("steps"), list)
+                    and bool(resume_checkpoint["plan"].get("steps"))
                 )
-                plan_data, plan_llm_ms, plan_usage = self._call_llm_json(
-                    build_plan_prompt(), plan_ctx.build()[1:], flog, "plan", round_i,
-                )
-                yield Timing(
-                    phase="llm_call",
-                    round=round_i,
-                    elapsed_ms=plan_llm_ms,
-                    metadata={"phase_owner": "plan", "stream": False},
-                )
-                yield TokenUsage(
-                    phase="llm_call",
-                    round=round_i,
-                    prompt_tokens=plan_usage["prompt_tokens"],
-                    completion_tokens=plan_usage["completion_tokens"],
-                    total_tokens=plan_usage["total_tokens"],
-                    cached_tokens=plan_usage["cached_tokens"],
-                    metadata={
-                        "phase_owner": "plan",
-                        "stream": False,
-                        "model": self._get_model(),
-                        "reasoning_tokens": plan_usage["reasoning_tokens"],
-                    },
-                )
-                steps = plan_data.get("steps", [])
+                if reuse_saved_plan:
+                    plan_data = resume_checkpoint["plan"]
+                    steps = plan_data.get("steps", [])
+                    yield AgentChunk(content="\n[断点续跑] 已复用上次中断前的计划步骤。\n")
+                else:
+                    plan_ctx = self._build_ctx(
+                        build_plan_prompt(), chat_messages,
+                        memory_context=plan_memory_context, rag_context=rag_context,
+                    )
+                    plan_data, plan_llm_ms, plan_usage = self._call_llm_json(
+                        build_plan_prompt(), plan_ctx.build()[1:], flog, "plan", round_i,
+                    )
+                    yield Timing(
+                        phase="llm_call",
+                        round=round_i,
+                        elapsed_ms=plan_llm_ms,
+                        metadata={"phase_owner": "plan", "stream": False},
+                    )
+                    yield TokenUsage(
+                        phase="llm_call",
+                        round=round_i,
+                        prompt_tokens=plan_usage["prompt_tokens"],
+                        completion_tokens=plan_usage["completion_tokens"],
+                        total_tokens=plan_usage["total_tokens"],
+                        cached_tokens=plan_usage["cached_tokens"],
+                        metadata={
+                            "phase_owner": "plan",
+                            "stream": False,
+                            "model": self._get_model(),
+                            "reasoning_tokens": plan_usage["reasoning_tokens"],
+                        },
+                    )
+                    steps = plan_data.get("steps", [])
 
                 yield AgentPlan(steps=steps, reasoning=plan_data.get("reasoning", ""))
                 yield Timing(
@@ -686,7 +817,7 @@ class PECAgent(BaseAgent):
                         phase="total",
                         round=round_i,
                         elapsed_ms=total_ms,
-                        metadata={"path": "no_steps", "session_id": session_id},
+                        metadata={"path": "no_steps", "session_id": session_id, "reused_tool_calls": reused_tool_calls},
                     )
                     flog.log_finish("completed_no_steps", round_i, time.time() - session_wall_t0)
                     yield AgentResult(content=synth_text)
@@ -708,8 +839,9 @@ class PECAgent(BaseAgent):
                 exec_text = yield from self._run_tool_loop(
                     build_execute_prompt(),
                     exec_ctx.build()[1:],
-                    self._exec_registry, flog, "execute", round_i,
+                    self._exec_registry, flog, "execute", round_i, replay_cache=replay_cache,
                 )
+                reused_tool_calls += exec_text.count("[断点续跑] 已复用工具结果:")
                 all_execute_results.append(exec_text)
 
                 yield Timing(
@@ -806,7 +938,7 @@ class PECAgent(BaseAgent):
                 phase="total",
                 round=round_i,
                 elapsed_ms=total_ms,
-                metadata={"session_id": session_id, "rounds": round_i},
+                metadata={"session_id": session_id, "rounds": round_i, "reused_tool_calls": reused_tool_calls},
             )
             flog.log_finish("completed", round_i, time.time() - session_wall_t0)
             yield AgentResult(content=synth_text)

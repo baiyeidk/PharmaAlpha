@@ -258,6 +258,73 @@ async function extractMemoryWithLLM(
   }
 }
 
+interface PecCheckpointTool {
+  name: string;
+  args?: Record<string, unknown>;
+  resultPreview?: string;
+  round?: number;
+}
+
+interface PecCheckpoint {
+  version: 1;
+  status: "running" | "interrupted" | "completed";
+  currentPhase?: string;
+  currentRound?: number;
+  plan?: {
+    steps?: Array<Record<string, unknown>>;
+    reasoning?: string;
+  };
+  successfulTools: PecCheckpointTool[];
+  check?: {
+    passed?: boolean;
+    summary?: string;
+    gaps?: string[];
+  };
+  errors?: Array<{ code: string; content: string; phase?: string }>;
+  updatedAt: string;
+}
+
+function toObjectRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  return value as Record<string, unknown>;
+}
+
+function readPecCheckpointFromMetadata(metadata: unknown): PecCheckpoint | null {
+  const md = toObjectRecord(metadata);
+  const cp = toObjectRecord(md?.pecCheckpoint);
+  if (!cp) return null;
+  if (cp.version !== 1) return null;
+  if (cp.status !== "running" && cp.status !== "interrupted" && cp.status !== "completed") return null;
+  const successfulTools = Array.isArray(cp.successfulTools)
+    ? (cp.successfulTools.filter((x) => x && typeof x === "object") as PecCheckpointTool[])
+    : [];
+  return {
+    version: 1,
+    status: cp.status,
+    currentPhase: typeof cp.currentPhase === "string" ? cp.currentPhase : undefined,
+    currentRound: typeof cp.currentRound === "number" ? cp.currentRound : undefined,
+    plan: toObjectRecord(cp.plan) as PecCheckpoint["plan"] | undefined,
+    successfulTools,
+    check: toObjectRecord(cp.check) as PecCheckpoint["check"] | undefined,
+    errors: Array.isArray(cp.errors) ? (cp.errors as PecCheckpoint["errors"]) : undefined,
+    updatedAt: typeof cp.updatedAt === "string" ? cp.updatedAt : new Date().toISOString(),
+  };
+}
+
+async function loadLatestPecCheckpoint(conversationId: string): Promise<PecCheckpoint | null> {
+  const rows = await prisma.message.findMany({
+    where: { conversationId, role: "assistant" },
+    orderBy: { createdAt: "desc" },
+    take: 30,
+    select: { metadata: true },
+  });
+  for (const row of rows) {
+    const cp = readPecCheckpointFromMetadata(row.metadata);
+    if (cp) return cp;
+  }
+  return null;
+}
+
 export async function POST(req: Request) {
   const debugId = req.headers.get("x-chat-debug-id") || crypto.randomUUID();
   console.info(`[api/chat] request received debugId=${debugId}`);
@@ -288,10 +355,13 @@ export async function POST(req: Request) {
   }
 
   // ── Resolve messages: server-load (newMessage) or legacy (messages[]) ──
-  const isServerLoad = typeof body.newMessage === "string";
+  const hasNewMessage = typeof body.newMessage === "string" && body.newMessage.trim().length > 0;
+  const isResume = body.resume === true;
+  const isServerLoad = hasNewMessage || isResume;
   let messages: Array<{ role: string; content: string }>;
   let convId: string | undefined = body.conversationId;
   let conversationAccess: Awaited<ReturnType<typeof getProjectConversationAccess>> | null = null;
+  let resumeCheckpoint: PecCheckpoint | null = null;
 
   if (isServerLoad) {
     if (convId) {
@@ -301,10 +371,26 @@ export async function POST(req: Request) {
       }
       conversationAccess = access;
       messages = await loadHistoryFromDB(convId);
+      if (isResume) {
+        resumeCheckpoint = await loadLatestPecCheckpoint(convId);
+      }
     } else {
+      if (isResume) {
+        return NextResponse.json(
+          { error: "resume requires conversationId" },
+          { status: 400 }
+        );
+      }
       messages = [];
     }
-    messages.push({ role: "user", content: body.newMessage });
+    if (hasNewMessage) {
+      messages.push({ role: "user", content: body.newMessage.trim() });
+    } else if (isResume) {
+      messages.push({
+        role: "user",
+        content: "继续上次中断的任务，复用已完成步骤并优先补齐缺口。",
+      });
+    }
   } else {
     messages = body.messages;
     if (!messages?.length) {
@@ -400,6 +486,9 @@ export async function POST(req: Request) {
       }));
     }
   }
+  if (isPECAgent && isResume && resumeCheckpoint) {
+    agentParams.resume_checkpoint = resumeCheckpoint;
+  }
 
   const llmConfig = await resolveLlmConfigForUser(session.id, {
     defaultBaseUrl: "https://api.deepseek.com",
@@ -461,6 +550,13 @@ export async function POST(req: Request) {
     phase?: string;
     details?: Record<string, unknown>;
   }> = [];
+  const pendingToolArgs = new Map<string, Record<string, unknown> | undefined>();
+  const checkpoint: PecCheckpoint = {
+    version: 1,
+    status: "running",
+    successfulTools: [],
+    updatedAt: new Date().toISOString(),
+  };
 
   const captureAndForward = new TransformStream<AgentOutputChunk, AgentOutputChunk>({
     async transform(chunk, controller) {
@@ -484,7 +580,57 @@ export async function POST(req: Request) {
       if ((chunk.type === "chunk" || chunk.type === "result") && chunk.content) {
         chunks.push(chunk.content);
       }
+      if (chunk.type === "phase_start") {
+        checkpoint.currentPhase = chunk.phase || checkpoint.currentPhase;
+        checkpoint.currentRound = typeof chunk.round === "number" ? chunk.round : checkpoint.currentRound;
+        checkpoint.updatedAt = new Date().toISOString();
+      }
+      if (chunk.type === "plan") {
+        checkpoint.plan = {
+          steps: Array.isArray(chunk.steps) ? chunk.steps : [],
+          reasoning: typeof chunk.reasoning === "string" ? chunk.reasoning : "",
+        };
+        checkpoint.updatedAt = new Date().toISOString();
+      }
+      if (chunk.type === "tool_start" && chunk.name) {
+        pendingToolArgs.set(chunk.name, chunk.args);
+      }
+      if (chunk.type === "tool_result" && chunk.name) {
+        const args = pendingToolArgs.get(chunk.name);
+        pendingToolArgs.delete(chunk.name);
+        if (chunk.success) {
+          checkpoint.successfulTools.push({
+            name: chunk.name,
+            args,
+            resultPreview: (chunk.result || "").slice(0, 1200),
+            round: checkpoint.currentRound,
+          });
+          if (checkpoint.successfulTools.length > 30) {
+            checkpoint.successfulTools = checkpoint.successfulTools.slice(-30);
+          }
+          checkpoint.updatedAt = new Date().toISOString();
+        }
+      }
+      if (chunk.type === "check") {
+        checkpoint.check = {
+          passed: typeof chunk.passed === "boolean" ? chunk.passed : undefined,
+          summary: typeof chunk.summary === "string" ? chunk.summary : undefined,
+          gaps: Array.isArray(chunk.gaps) ? chunk.gaps.map((x) => String(x)) : undefined,
+        };
+        checkpoint.updatedAt = new Date().toISOString();
+      }
       if (chunk.type === "error" && (chunk.content || chunk.code)) {
+        checkpoint.status = "interrupted";
+        checkpoint.errors = checkpoint.errors || [];
+        checkpoint.errors.push({
+          code: chunk.code || "AGENT_ERROR",
+          content: chunk.content || "",
+          phase: typeof chunk.phase === "string" ? chunk.phase : undefined,
+        });
+        if (checkpoint.errors.length > 10) {
+          checkpoint.errors = checkpoint.errors.slice(-10);
+        }
+        checkpoint.updatedAt = new Date().toISOString();
         errors.push({
           code: chunk.code || "AGENT_ERROR",
           content: chunk.content || "",
@@ -529,6 +675,10 @@ export async function POST(req: Request) {
       }
 
       if (persistedContent) {
+        if (checkpoint.status === "running") {
+          checkpoint.status = errors.length > 0 ? "interrupted" : "completed";
+        }
+        checkpoint.updatedAt = new Date().toISOString();
         try {
           await prisma.message.create({
             data: {
@@ -536,6 +686,12 @@ export async function POST(req: Request) {
               content: persistedContent,
               conversationId: convId!,
               agentId: agent.id,
+              metadata: isPECAgent
+                ? ({
+                    pecCheckpoint: checkpoint,
+                    resumeSource: isResume ? "resume" : "normal",
+                  } as Record<string, unknown>)
+                : undefined,
             },
           });
         } catch (err) {
