@@ -3,7 +3,9 @@
 Search backends, in order of preference:
   1. Tavily Search API (if TAVILY_API_KEY is set) — purpose-built for LLMs,
      auto-ranks by relevance and returns clean snippets.
-  2. Bing HTML scrape with mkt=zh-CN, freshness filter, and a UGC-site
+  2. SerpAPI (if SERPAPI_API_KEY is set) — hosted Google search, reliable
+     from cloud IPs that Bing tends to soft-block with junk fallback pages.
+  3. Bing HTML scrape with mkt=zh-CN, freshness filter, and a UGC-site
      blocklist so 知乎/小红书/抖音 stop polluting Chinese-finance results.
 
 The two surface tools differ by intent:
@@ -194,6 +196,65 @@ def _search_via_tavily(
     return items
 
 
+# ── Backend: SerpAPI (Google) ──────────────────────────────
+
+
+_SERPAPI_TBS_DAYS = {1: "qdr:d", 7: "qdr:w", 30: "qdr:m", 365: "qdr:y"}
+
+
+def _search_via_serpapi(
+    query: str,
+    num_results: int,
+    topic: str = "general",
+    days: int | None = None,
+) -> list[dict[str, str]] | None:
+    """SerpAPI google / google_news. Returns None when not configured."""
+    api_key = os.environ.get("SERPAPI_API_KEY")
+    if not api_key:
+        return None
+
+    params: dict[str, str] = {
+        "api_key": api_key,
+        "q": query,
+        "hl": "zh-cn",
+        "gl": "cn",
+        "num": str(max(num_results, 5)),
+        "engine": "google_news" if topic == "news" else "google",
+    }
+    if days and days in _SERPAPI_TBS_DAYS:
+        params["tbs"] = _SERPAPI_TBS_DAYS[days]
+
+    url = "https://serpapi.com/search?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        # Fail soft — caller will fall back to next backend.
+        return [{"_error": f"serpapi failed: {e}"}]
+
+    if isinstance(data.get("error"), str):
+        return [{"_error": f"serpapi error: {data['error']}"}]
+
+    raw = data.get("news_results") if topic == "news" else data.get("organic_results")
+    raw = raw or []
+
+    items: list[dict[str, str]] = []
+    for r in raw:
+        link = r.get("link") or r.get("url") or ""
+        if _domain_is_blocked(link):
+            continue
+        items.append({
+            "title": r.get("title") or "",
+            "url": link,
+            "snippet": r.get("snippet") or r.get("source") or "",
+            "date": r.get("date") or "",
+        })
+        if len(items) >= num_results:
+            break
+    return items
+
+
 # ── Backend: Bing HTML ─────────────────────────────────────
 
 
@@ -266,11 +327,21 @@ def search_web(query: str, num_results: int = 5, freshness: str = "auto") -> str
         fresh = None
 
     days_map = {"day": 1, "week": 7, "month": 30, "year": 365}
-    items = _search_via_tavily(query, num, topic="general", days=days_map.get(fresh or ""))
+    days = days_map.get(fresh or "")
+
+    used_backend = "Tavily"
+    items = _search_via_tavily(query, num, topic="general", days=days)
     if items and items[0].get("_error"):
         items = None
 
     if items is None:
+        used_backend = "SerpAPI"
+        items = _search_via_serpapi(query, num, topic="general", days=days)
+        if items and items[0].get("_error"):
+            items = None
+
+    if items is None:
+        used_backend = "Bing"
         try:
             items = _search_via_bing(query, num, freshness=fresh)
         except Exception as e:
@@ -281,9 +352,8 @@ def search_web(query: str, num_results: int = 5, freshness: str = "auto") -> str
         return f"搜索 '{query}' 未找到有效结果。\n{hint}"
 
     formatted = _format_results(items)
-    backend = "Tavily" if os.environ.get("TAVILY_API_KEY") else "Bing"
     fresh_note = f" · freshness={fresh}" if fresh else ""
-    return f"[{backend}{fresh_note}] 搜索 '{query}' 找到 {len(items)} 条结果：\n\n{formatted}"
+    return f"[{used_backend}{fresh_note}] 搜索 '{query}' 找到 {len(items)} 条结果：\n\n{formatted}"
 
 
 @tool(description=(
@@ -299,11 +369,19 @@ def search_news(query: str, num_results: int = 5, freshness: str = "week") -> st
     fresh = freshness if freshness in {"day", "week", "month"} else "week"
     days_map = {"day": 1, "week": 7, "month": 30}
 
+    used_backend = "Tavily"
     items = _search_via_tavily(query, num, topic="news", days=days_map[fresh])
     if items and items[0].get("_error"):
         items = None
 
     if items is None:
+        used_backend = "SerpAPI"
+        items = _search_via_serpapi(query, num, topic="news", days=days_map[fresh])
+        if items and items[0].get("_error"):
+            items = None
+
+    if items is None:
+        used_backend = "Bing"
         # Bing news fallback: append a soft news intent so we bias toward articles.
         try:
             items = _search_via_bing(query, num, freshness=fresh)
@@ -317,8 +395,7 @@ def search_news(query: str, num_results: int = 5, freshness: str = "week") -> st
         )
 
     formatted = _format_results(items)
-    backend = "Tavily" if os.environ.get("TAVILY_API_KEY") else "Bing"
-    return f"[{backend} news · last {fresh}] '{query}' 找到 {len(items)} 条：\n\n{formatted}"
+    return f"[{used_backend} news · last {fresh}] '{query}' 找到 {len(items)} 条：\n\n{formatted}"
 
 
 @tool(description="抓取网页内容并提取文本")
