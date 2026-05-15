@@ -98,6 +98,8 @@ jobs:
       url: ${{ vars.HEALTH_URL }}
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Configure SSH
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
@@ -108,6 +110,26 @@ jobs:
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -p "${SSH_PORT:-22}" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      # Push deploy manifests via scp from the (overseas) GH runner instead of
+      # asking the (Chinese mainland) server to `git pull` from github.com.
+      # github.com over GnuTLS from CN ECS is unreliable and was failing the
+      # deploy step with "TLS connection was non-properly terminated".
+      # All source code lives in the ACR image, so the server only needs the
+      # three docker-compose files and its own .env.production.
+      - name: Sync deploy manifests via scp
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          DEPLOY_PATH="${DEPLOY_PATH:-/opt/pharma-alpha}"
+          scp -P "${SSH_PORT:-22}" \
+            docker-compose.yml \
+            docker-compose.production.yml \
+            docker-compose.image.yml \
+            "$SSH_USER@$SSH_HOST:$DEPLOY_PATH/"
 
       - name: Deploy
         env:
@@ -130,9 +152,7 @@ jobs:
           DEPLOY_PATH="${DEPLOY_PATH:-/opt/pharma-alpha}"
           cd "\$DEPLOY_PATH"
 
-          echo "==> Pulling latest deployment manifests ($GIT_BRANCH @ ${GIT_SHA:0:7})"
-          git fetch --all --prune
-          git reset --hard "origin/$GIT_BRANCH"
+          echo "==> Deploying $GIT_BRANCH @ ${GIT_SHA:0:7} (image tag: $IMAGE_TAG)"
 
           if [ ! -f .env.production ]; then
             echo "ERROR: .env.production missing on server. Aborting." >&2
