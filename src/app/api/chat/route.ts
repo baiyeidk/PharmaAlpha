@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@/generated/prisma/client";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { executeAgent, sseEncoder, sseHeaders, getAgentById } from "@/lib/agents";
@@ -690,7 +691,7 @@ export async function POST(req: Request) {
                 ? ({
                     pecCheckpoint: checkpoint,
                     resumeSource: isResume ? "resume" : "normal",
-                  } as Record<string, unknown>)
+                  } as unknown as Prisma.InputJsonValue)
                 : undefined,
             },
           });
