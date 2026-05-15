@@ -17,17 +17,19 @@ echo "ensuring pgvector extension..."
 psql "$DB_URL_NO_QUERY" -c 'CREATE EXTENSION IF NOT EXISTS vector;'
 
 # ────────────────────────────────────────────────────────────────
-# Schema migration: prefer `prisma migrate deploy` (versioned, safe).
+# Schema migration strategy (in priority order):
 #
-# Three possible db states we have to handle:
-#   1. Empty database                 → migrate deploy applies everything
-#   2. DB previously managed by migrate (has _prisma_migrations table)
-#                                     → migrate deploy applies any pending
-#   3. DB previously managed by `db push` (schema exists but no
-#      _prisma_migrations table)     → STOP and ask the operator to baseline
+#   A. PRISMA_ALLOW_DB_PUSH=true (highest priority, DEV/DEMO only)
+#      Always use `db push --accept-data-loss` to keep db schema
+#      in sync with prisma/schema.prisma. Skips migration history.
+#      Use this when iterating fast and migrations are out of sync.
 #
-# Set PRISMA_ALLOW_DB_PUSH=true to fall back to the legacy
-# `db push --accept-data-loss` behavior — DEV ONLY, never in production.
+#   B. Has _prisma_migrations table OR empty db
+#      Use `prisma migrate deploy` (versioned, production-safe).
+#
+#   C. Has user tables but no _prisma_migrations table
+#      STOP. The db was created by a previous `db push` and needs
+#      to be baselined manually (or PRISMA_ALLOW_DB_PUSH=true used).
 # ────────────────────────────────────────────────────────────────
 
 echo "checking schema migration state..."
@@ -45,13 +47,13 @@ HAS_USER_TABLES=$(
        AND table_name <> '_prisma_migrations'"
 )
 
-if [ "$HAS_MIGRATIONS_TABLE" = "t" ] || [ "$HAS_USER_TABLES" = "f" ]; then
+if [ "${PRISMA_ALLOW_DB_PUSH:-false}" = "true" ]; then
+  echo "PRISMA_ALLOW_DB_PUSH=true → using db push (schema drift will be resolved)"
+  echo "  WARNING: this is DEV/DEMO-only. It can drop columns/tables on schema drift."
+  npx prisma db push --accept-data-loss --skip-generate
+elif [ "$HAS_MIGRATIONS_TABLE" = "t" ] || [ "$HAS_USER_TABLES" = "f" ]; then
   echo "running prisma migrate deploy..."
   npx prisma migrate deploy
-elif [ "${PRISMA_ALLOW_DB_PUSH:-false}" = "true" ]; then
-  echo "WARNING: legacy db push fallback enabled (PRISMA_ALLOW_DB_PUSH=true)."
-  echo "         This is DEV-ONLY. It can drop columns/tables on schema drift."
-  npx prisma db push --accept-data-loss
 else
   cat >&2 <<'EOF'
 

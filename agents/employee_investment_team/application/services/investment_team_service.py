@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 import concurrent.futures
+import os
 import uuid
+
+
+def _default_llm_model() -> str:
+    """Resolve the LLM model from env, falling back to deepseek-chat."""
+    return os.environ.get("LLM_MODEL") or "deepseek-chat"
 
 from employee_investment_team.application.dto.workflow_result import WorkflowResultDTO
 from employee_investment_team.capabilities import (
@@ -284,7 +290,7 @@ class InvestmentTeamService:
             selected_sop_name=node.sop_name,
             node_params=node.params,
         )
-        analyses[node.node_id] = self._llm.complete(messages=messages, model="deepseek-chat")
+        analyses[node.node_id] = self._llm.complete(messages=messages, model=_default_llm_model())
         self._log(
             "workflow_node_completed",
             draft_id=state["draft"].draft_id,
@@ -310,7 +316,7 @@ class InvestmentTeamService:
             selected_skill_name=node.skill_name,
             selected_sop_name=node.sop_name,
         )
-        response = self._llm.complete(messages=messages, model="deepseek-chat")
+        response = self._llm.complete(messages=messages, model=_default_llm_model())
         discussion = parse_discussion_response(response, state["draft"].topic)
         self._log(
             "workflow_node_completed",
@@ -447,7 +453,7 @@ class InvestmentTeamService:
             team_skill_map=team_skill_map,
         )
         try:
-            response = self._complete_with_timeout(messages=messages, model="deepseek-chat", timeout_seconds=8.0)
+            response = self._complete_with_timeout(messages=messages, model=_default_llm_model(), timeout_seconds=8.0)
             planned = parse_graph_plan_response(response)
             nodes = self._materialize_planned_nodes(
                 planned.get("nodes", []),
