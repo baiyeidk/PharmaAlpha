@@ -1,11 +1,27 @@
 node_modules
 .next
 .git
+.github
 .env
+.env.*
+!.env.example
+!.env.production.example
+
+# Python / agent 运行时产物
 agents/logs
 agents/__pycache__
 **/__pycache__
 *.pyc
 .venv
+
+# 运行时数据 / 评测产物 / 文档（不参与构建，避免 invalidate COPY . . 层）
+artifacts
+uploads
+docs
 openspec
 .cursor
+
+# 杂项
+*.log
+*.tsbuildinfo
+.DS_Store

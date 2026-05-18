@@ -3,6 +3,25 @@ name: Deploy to Production
 on:
   push:
     branches: [main]
+    # 不触发部署：文档、种子 SQL、规范文档、IDE 配置、本地 artifact。
+    # 减少 ~30-40% 的无意义构建（runner 分钟 + ACR 流量）。
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "openspec/**"
+      - "prisma/seeds/**"
+      - ".cursor/**"
+      - "artifacts/**"
+      - ".gitignore"
+      - "LICENSE"
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "openspec/**"
+      - "artifacts/**"
+      - ".cursor/**"
   workflow_dispatch:
     inputs:
       skip_lint:
@@ -11,12 +30,14 @@ on:
         default: false
 
 concurrency:
-  group: production-deploy
-  cancel-in-progress: false
+  # PR 之间互相 cancel，节省 runner 分钟；push main 用独立组不互踩。
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # ────────────────────────────────────────────────────────────
   # Stage 1: Static checks (gate)
+  # lint 与 typecheck 并行跑，单 job 节省一次 runner 启动 + npm ci 时间。
   # ────────────────────────────────────────────────────────────
   lint:
     name: Lint & Type Check
@@ -30,21 +51,41 @@ jobs:
           cache: "npm"
       - run: npm ci --no-audit --no-fund
       - run: npx prisma generate
-      - run: npm run lint
-      - run: npx tsc --noEmit
+
+      - name: Lint & TypeCheck (parallel)
+        shell: bash
+        run: |
+          set +e
+          npm run lint > lint.log 2>&1 &
+          LINT_PID=$!
+          npx tsc --noEmit > tsc.log 2>&1 &
+          TSC_PID=$!
+
+          wait $LINT_PID; LINT_EXIT=$?
+          wait $TSC_PID;  TSC_EXIT=$?
+
+          echo "──────── eslint ────────"
+          cat lint.log
+          echo "──────── tsc -noEmit ────────"
+          cat tsc.log
+
+          if [ $LINT_EXIT -ne 0 ] || [ $TSC_EXIT -ne 0 ]; then
+            echo "::error::lint=$LINT_EXIT  tsc=$TSC_EXIT"
+            exit 1
+          fi
 
   # ────────────────────────────────────────────────────────────
   # Stage 2: Build the production image and push to Aliyun ACR
-  # Runs on a GitHub-hosted runner (7 GB RAM, multi-core) — the production
-  # server does NOT build. NODE_IMAGE is overridden to the Docker Hub
-  # original because the runner is overseas and would be slower hitting
-  # the China-only mirror baked into the Dockerfile default.
+  # 只在 push main / 手动触发时执行；PR 仅跑 lint 不烧 build 分钟。
   # ────────────────────────────────────────────────────────────
   build-and-push:
     name: Build & Push Image
     runs-on: ubuntu-latest
     needs: [lint]
-    if: ${{ always() && (needs.lint.result == 'success' || needs.lint.result == 'skipped') }}
+    if: |
+      always()
+      && (needs.lint.result == 'success' || needs.lint.result == 'skipped')
+      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     outputs:
       image_tag: ${{ steps.meta.outputs.image_tag }}
     steps:
@@ -72,30 +113,27 @@ jobs:
         with:
           context: .
           push: true
-          # Tag with both the immutable SHA (for rollback) and `latest`
-          # (so a manual `docker compose pull` always grabs the newest).
+          # 同时打 SHA（回滚用）和 latest（手动 pull 用）两个 tag。
           tags: |
             ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/app:${{ steps.meta.outputs.image_tag }}
             ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/app:latest
-          # Override the China-mirror default in the Dockerfile so the
-          # GitHub-hosted runner pulls node:20-slim straight from Docker Hub.
+          # 多阶段 Dockerfile 各 stage 共享层缓存。Buildx scope 拆分到 stage 级
+          # 能让 prod-deps / python-venv 这种"几乎不变"的层稳定命中。
           build-args: |
             NODE_IMAGE=node:20-slim
-          # Cache build layers across runs to dramatically speed up subsequent builds.
-          # ignore-error=true: when GitHub Actions Cache backend hiccups
-          # (intermittent 502 "Unicorn" pages), don't fail the whole build —
-          # we lose this run's cache but the image already pushed to ACR.
-          cache-from: type=gha
-          cache-to: type=gha,mode=max,ignore-error=true
+          cache-from: type=gha,scope=buildx
+          cache-to: type=gha,scope=buildx,mode=max,ignore-error=true
+          provenance: false
+          sbom: false
 
   # ────────────────────────────────────────────────────────────
   # Stage 3: SSH to the server, pull the new image, restart the stack.
-  # No source code or Docker build happens on the server.
   # ────────────────────────────────────────────────────────────
   deploy:
     name: SSH Deploy
     runs-on: ubuntu-latest
     needs: [build-and-push]
+    if: ${{ needs.build-and-push.result == 'success' }}
     environment:
       name: production
       url: ${{ vars.HEALTH_URL }}
@@ -114,12 +152,7 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -p "${SSH_PORT:-22}" -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
-      # Push deploy manifests via scp from the (overseas) GH runner instead of
-      # asking the (Chinese mainland) server to `git pull` from github.com.
-      # github.com over GnuTLS from CN ECS is unreliable and was failing the
-      # deploy step with "TLS connection was non-properly terminated".
-      # All source code lives in the ACR image, so the server only needs the
-      # three docker-compose files and its own .env.production.
+      # 把 3 个 compose 文件 scp 到服务器（源码全部在镜像里，服务器只需 manifests）
       - name: Sync deploy manifests via scp
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -146,9 +179,6 @@ jobs:
           ACR_REGISTRY_VPC: ${{ secrets.ACR_REGISTRY_VPC }}
           ACR_NAMESPACE: ${{ secrets.ACR_NAMESPACE }}
         run: |
-          # Heredoc is unquoted so the local env vars below are interpolated
-          # before the script is sent to the server. Anything that should be
-          # evaluated on the *remote* is escaped with \$.
           ssh -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" bash -se <<REMOTE
           set -euo pipefail
 
@@ -162,9 +192,6 @@ jobs:
             exit 2
           fi
 
-          # Variables needed by docker-compose.image.yml's \${VAR} interpolation.
-          # docker compose only reads them from --env-file or the shell, never
-          # from a service's env_file: block.
           export ACR_REGISTRY_VPC="$ACR_REGISTRY_VPC"
           export ACR_NAMESPACE="$ACR_NAMESPACE"
           export IMAGE_TAG="$IMAGE_TAG"
@@ -185,8 +212,7 @@ jobs:
             -f docker-compose.image.yml \
             up -d --remove-orphans
 
-          echo "==> Pruning unused images (keep 2 most recent)"
-          # Keep the previous image around so rollback via \`docker compose pull\` + tag swap is fast.
+          echo "==> Pruning unused images"
           docker image prune -f
 
           echo "==> Container status:"
