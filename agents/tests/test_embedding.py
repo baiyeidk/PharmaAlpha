@@ -43,8 +43,8 @@ class TestGetDimensions(unittest.TestCase):
 
     @patch.dict(os.environ, {}, clear=True)
     def test_default_dimensions(self):
-        from base.embedding import _get_dimensions
-        self.assertEqual(_get_dimensions(), 1536)
+        from base.embedding import _get_dimensions, DEFAULT_DIMENSIONS
+        self.assertEqual(_get_dimensions(), DEFAULT_DIMENSIONS)
 
 
 class TestEmbedSingle(unittest.TestCase):

@@ -21,6 +21,14 @@ docs
 openspec
 .cursor
 
+# 测试文件（生产镜像不需要）
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+vitest.config.*
+agents/tests
+
 # 杂项
 *.log
 *.tsbuildinfo
