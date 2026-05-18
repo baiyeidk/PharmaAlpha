@@ -82,8 +82,11 @@ jobs:
           build-args: |
             NODE_IMAGE=node:20-slim
           # Cache build layers across runs to dramatically speed up subsequent builds.
+          # ignore-error=true: when GitHub Actions Cache backend hiccups
+          # (intermittent 502 "Unicorn" pages), don't fail the whole build —
+          # we lose this run's cache but the image already pushed to ACR.
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=max,ignore-error=true
 
   # ────────────────────────────────────────────────────────────
   # Stage 3: SSH to the server, pull the new image, restart the stack.
